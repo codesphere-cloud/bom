@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Chart.Name }}-cron
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: worker
+              image: {{ .Values.cron.image }}

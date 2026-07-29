@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: make fmt-check
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.3.1
+          args: ./cmd/helm-bom ./internal/cli ./internal/helm ./internal/images ./internal/sbom ./test/e2e
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: azure/setup-helm@v4.3.0
+
+      - name: Check Required Tools
+        run: make check-tools
+
+      - name: Build
+        run: make build
+
+      - name: Unit And Package Tests
+        run: make test
+
+      - name: End-to-End Test
+        run: make test-e2e
