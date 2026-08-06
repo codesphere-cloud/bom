@@ -3,8 +3,6 @@ package sbom
 import (
 	"encoding/json"
 	"io"
-
-	intcsbom "github.com/codesphere-cloud/helm-bom/internal/csbom"
 )
 
 type CSBOMJSONFormatter struct{}
@@ -12,18 +10,10 @@ type CSBOMJSONFormatter struct{}
 func (CSBOMJSONFormatter) Format(w io.Writer, document Document) error {
 	document = withDefaults(document)
 
-	payload := intcsbom.Config{
-		Components: map[string]intcsbom.ComponentConfig{
-			componentName(document.Metadata.Source): {
-				ContainerImages: containerImages(document.Components),
-			},
-		},
-	}
-
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 
-	return encoder.Encode(payload)
+	return encoder.Encode(csbomPayload(document))
 }
 
 func componentName(source SourceMetadata) string {

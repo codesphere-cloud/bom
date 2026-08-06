@@ -1,6 +1,6 @@
 # helm-bom
 
-`helm-bom` templates a Helm chart, extracts OCI image references from supported Kubernetes workload primitives, and emits either SPDX JSON or the existing internal `csbom` JSON format.
+`helm-bom` templates a Helm chart, extracts OCI image references from supported Kubernetes workload primitives, and emits either SPDX JSON or the internal `csbom` format in JSON or YAML.
 
 ## Usage
 
@@ -34,8 +34,9 @@ Supported output formats:
 
 - `spdx-json` (default)
 - `csbom-json`
+- `csbom-yaml`
 - `spdx`
-- `csbom`
+- `csbom` (alias of `csbom-yaml`)
 
 ### SPDX JSON
 
@@ -103,6 +104,17 @@ The `csbom-json` export uses the existing [internal/csbom/bom.go](/Users/schrodi
 }
 ```
 
+### CSBOM YAML
+
+The `csbom` and `csbom-yaml` exports use the same shape encoded as YAML:
+
+```yaml
+components:
+  chart:
+    containerImages:
+      ghcr.io/acme/api: ghcr.io/acme/api:1.2.3
+```
+
 Supported Kubernetes primitives are handled explicitly rather than via generic YAML walking:
 
 - `Pod`
@@ -118,6 +130,6 @@ Supported Kubernetes primitives are handled explicitly rather than via generic Y
 
 Image reference parsing uses Docker’s upstream `github.com/distribution/reference` package.
 
-SPDX document generation and JSON serialization use the upstream `github.com/spdx/tools-golang` library rather than a local SPDX struct implementation. The `csbom` export uses the existing `internal/csbom` package directly.
+SPDX document generation and JSON serialization use the upstream `github.com/spdx/tools-golang` library rather than a local SPDX struct implementation. The `csbom` exports use the existing `internal/csbom` package directly.
 
 The formatter remains isolated behind `--format`, so additional SPDX serializations can be added later without changing Helm rendering or Kubernetes extraction.

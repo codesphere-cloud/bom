@@ -39,11 +39,12 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Short: "Template Helm charts and emit an SPDX SBOM for referenced OCI images",
 		Long: "helm-bom renders a Helm chart with helm template, extracts OCI image references " +
 			"from supported Kubernetes workload resources, and writes the result in either SPDX JSON " +
-			"or the internal csbom format.",
+			"or the internal csbom JSON/YAML formats.",
 		Example: "" +
 			"  helm-bom ./chart\n" +
 			"  helm-bom ./chart --values values.yaml --set image.tag=1.2.3\n" +
 			"  helm-bom ./chart --format csbom-json --output bom.json\n" +
+			"  helm-bom ./chart --format csbom-yaml --output bom.yaml\n" +
 			"  helm-bom ./chart --release-name my-release --namespace production\n" +
 			"  helm-bom ./chart --helm-arg=--include-crds",
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -69,7 +70,7 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	flags := cmd.Flags()
 	flags.StringVar(&cfg.releaseName, "release-name", "", "Helm release name. Defaults to the chart name from Chart.yaml.")
 	flags.StringVar(&cfg.namespace, "namespace", "default", "Namespace passed to helm template.")
-	flags.StringVar(&cfg.format, "format", "spdx-json", "Output format: spdx-json, spdx, csbom-json, or csbom.")
+	flags.StringVar(&cfg.format, "format", "spdx-json", "Output format: spdx-json, spdx, csbom-json, csbom-yaml, or csbom.")
 	flags.StringVarP(&cfg.outputPath, "output", "o", "", "Write output to a file instead of stdout.")
 	flags.StringSliceVar(&cfg.valuesFiles, "values", nil, "Additional Helm values files. May be specified multiple times.")
 	flags.StringSliceVar(&cfg.setValues, "set", nil, "Helm --set overrides. May be specified multiple times.")

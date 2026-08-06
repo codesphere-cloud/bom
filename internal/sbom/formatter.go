@@ -14,7 +14,9 @@ func NewFormatter(name string) (Formatter, error) {
 	switch name {
 	case "spdx", "spdx-json":
 		return SPDXJSONFormatter{}, nil
-	case "csbom", "csbom-json":
+	case "csbom", "csbom-yaml":
+		return CSBOMYAMLFormatter{}, nil
+	case "csbom-json":
 		return CSBOMJSONFormatter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported format %q", name)

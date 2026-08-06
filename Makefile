@@ -28,11 +28,7 @@ fmt-check: ## Check that Go code is formatted
 	test -z "$$(gofmt -l $$(find . -name '*.go' -not -path './vendor/*'))"
 
 lint: ## Run the linter
-	mkdir -p $(GOLANGCI_LINT_CACHE) $(GOCACHE)
-	for pkg in $(LINT_PACKAGES); do \
-		echo "lint $$pkg"; \
-		GOLANGCI_LINT_CACHE=$(GOLANGCI_LINT_CACHE) GOCACHE=$(GOCACHE) golangci-lint run $$pkg || exit $$?; \
-	done
+	go tool golangci-lint run
 
 clean: ## Remove build artifacts
 	rm -rf bin .tmp
