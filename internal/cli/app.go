@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
 	"github.com/codesphere-cloud/helm-bom/internal/helm"
 	"github.com/codesphere-cloud/helm-bom/internal/images"
 	"github.com/codesphere-cloud/helm-bom/internal/sbom"
@@ -109,6 +110,16 @@ func run(stdout io.Writer, cfg config) error {
 		return err
 	}
 
+	bomConfig, err := bomrc.Load(cfg.chartPath)
+	if err != nil {
+		return err
+	}
+
+	configuredRefs, err := images.ExtractConfigured(manifest, bomConfig.AdditionalImages)
+	if err != nil {
+		return err
+	}
+
 	document := sbom.Document{
 		Metadata: sbom.Metadata{
 			Tool: sbom.ToolMetadata{
@@ -126,7 +137,7 @@ func run(stdout io.Writer, cfg config) error {
 				HelmArgs:    cfg.helmArgs,
 			},
 		},
-		Components: sbom.ComponentsFromImages(refs),
+		Components: sbom.ComponentsFromImages(images.Merge(refs, configuredRefs)),
 	}
 
 	formatter, err := sbom.NewFormatter(cfg.format)

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-images
+data:
+  sidecars:
+    - name: metrics
+      image: ghcr.io/example/metrics:9.8.7

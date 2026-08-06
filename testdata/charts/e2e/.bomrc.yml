@@ -1,0 +1,6 @@
+additionalImages:
+  - resource:
+      apiVersion: v1
+      kind: ConfigMap
+      name: extra-images
+    image: .data.sidecars[] | select(.name == "metrics") | .image

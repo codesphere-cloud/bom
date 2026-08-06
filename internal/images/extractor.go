@@ -1,48 +1,28 @@
 package images
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 
 	yamlv3 "gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	sigsyaml "sigs.k8s.io/yaml"
 )
-
-type manifestHeader struct {
-	APIVersion string            `yaml:"apiVersion"`
-	Kind       string            `yaml:"kind"`
-	Metadata   metav1.ObjectMeta `yaml:"metadata"`
-}
 
 type listObject struct {
 	Items []json.RawMessage `json:"items"`
 }
 
 func Extract(manifest []byte) ([]ImageRef, error) {
-	decoder := yamlv3.NewDecoder(bytes.NewReader(manifest))
 	found := map[string]*ImageRef{}
-
-	for {
-		var document yamlv3.Node
-		err := decoder.Decode(&document)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("decode manifest document: %w", err)
-		}
-
-		if len(document.Content) == 0 {
-			continue
-		}
-
+	documents, err := manifestDocuments(manifest)
+	if err != nil {
+		return nil, err
+	}
+	for _, document := range documents {
 		if err := extractDocument(&document, found); err != nil {
 			return nil, err
 		}
@@ -61,82 +41,77 @@ func Extract(manifest []byte) ([]ImageRef, error) {
 	return refs, nil
 }
 
-func extractDocument(document *yamlv3.Node, found map[string]*ImageRef) error {
-	documentBytes, err := yamlv3Marshal(document)
+func extractDocument(document *manifestDocument, found map[string]*ImageRef) error {
+	documentBytes, err := sigsyaml.Marshal(document.object)
 	if err != nil {
 		return fmt.Errorf("marshal manifest document: %w", err)
 	}
 
-	var header manifestHeader
-	if err := sigsyaml.Unmarshal(documentBytes, &header); err != nil {
-		return fmt.Errorf("decode manifest header: %w", err)
-	}
-
-	switch header.Kind {
+	switch document.header.Kind {
 	case "Pod":
 		var object corev1.Pod
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec)
 		return nil
 	case "PodTemplate":
 		var object corev1.PodTemplate
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Template.Spec)
 		return nil
 	case "ReplicationController":
 		var object corev1.ReplicationController
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
 		if object.Spec.Template != nil {
-			collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+			collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		}
 		return nil
 	case "Deployment":
 		var object appsv1.Deployment
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		return nil
 	case "ReplicaSet":
 		var object appsv1.ReplicaSet
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		return nil
 	case "DaemonSet":
 		var object appsv1.DaemonSet
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		return nil
 	case "StatefulSet":
 		var object appsv1.StatefulSet
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		return nil
 	case "Job":
 		var object batchv1.Job
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.Template.Spec)
 		return nil
 	case "CronJob":
 		var object batchv1.CronJob
 		if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-			return fmt.Errorf("decode %s: %w", header.Kind, err)
+			return fmt.Errorf("decode %s: %w", document.header.Kind, err)
 		}
-		collectPodSpec(found, header.Kind, object.Name, object.Spec.JobTemplate.Spec.Template.Spec)
+		collectPodSpec(found, document.header.Kind, object.Name, object.Spec.JobTemplate.Spec.Template.Spec)
 		return nil
 	case "List":
 		var object listObject
@@ -148,7 +123,15 @@ func extractDocument(document *yamlv3.Node, found map[string]*ImageRef) error {
 			if err := yamlv3.Unmarshal(item, &child); err != nil {
 				return fmt.Errorf("decode List item: %w", err)
 			}
-			if err := extractDocument(&child, found); err != nil {
+
+			header, parsed, err := parseManifestDocument(&child)
+			if err != nil {
+				return err
+			}
+			if err := extractDocument(&manifestDocument{
+				header: header,
+				object: parsed,
+			}, found); err != nil {
 				return err
 			}
 		}

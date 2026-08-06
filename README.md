@@ -2,6 +2,8 @@
 
 `helm-bom` templates a Helm chart, extracts OCI image references from supported Kubernetes workload primitives, and emits either SPDX JSON or the internal `csbom` format in JSON or YAML.
 
+If a chart contains a `.bomrc.yml` file, `helm-bom` also evaluates any configured `additionalImages` entries against the rendered manifest and merges those image references into the output.
+
 ## Usage
 
 ```bash
@@ -127,6 +129,25 @@ Supported Kubernetes primitives are handled explicitly rather than via generic Y
 - `Job`
 - `CronJob`
 - `List` containing any of the above
+
+## `.bomrc.yml`
+
+Per-chart extra image discovery can be configured with an optional `.bomrc.yml` file in the chart root:
+
+```yaml
+additionalImages:
+  - resource:
+      apiVersion: v1
+      kind: ConfigMap
+      name: extra-images
+    image: .data.sidecars[] | select(.name == "metrics") | .image
+```
+
+Each `additionalImages` entry:
+
+- selects one rendered Kubernetes resource by `apiVersion`, `kind`, and `metadata.name`
+- evaluates the `image` field as a yq-style selector against that resource
+- must resolve to exactly one string image reference
 
 Image reference parsing uses Docker’s upstream `github.com/distribution/reference` package.
 
