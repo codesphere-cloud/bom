@@ -145,6 +145,11 @@ Supported Kubernetes primitives are handled explicitly rather than via generic Y
 Per-chart extra image discovery can be configured with an optional `.bomrc.yml` file in the chart root:
 
 ```yaml
+dummyValues:
+  image:
+    repository: ghcr.io/acme/api
+    tag: latest
+
 additionalImages:
   - resource:
       apiVersion: v1
@@ -152,6 +157,8 @@ additionalImages:
       name: extra-images
     image: .data.sidecars[] | select(.name == "metrics") | .image
 ```
+
+`dummyValues` is optional. When present, `helm-bom` writes it to a temporary Helm values file and passes it before any CLI-supplied `--values` files, so explicit user inputs still override these placeholders.
 
 Each `additionalImages` entry:
 

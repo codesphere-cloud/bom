@@ -13,6 +13,7 @@ const fileName = ".bomrc.yml"
 
 type Config struct {
 	AdditionalImages []AdditionalImage `json:"additionalImages"`
+	DummyValues      map[string]any    `json:"dummyValues,omitempty"`
 }
 
 type AdditionalImage struct {

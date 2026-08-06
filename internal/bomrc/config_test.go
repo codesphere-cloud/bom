@@ -25,6 +25,10 @@ additionalImages:
       kind: ConfigMap
       name: extra-images
     image: .data.sidecar
+dummyValues:
+  image:
+    repository: ghcr.io/example/api
+    tag: latest
 `)
 	if err := os.WriteFile(filepath.Join(chartPath, fileName), content, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -45,5 +49,16 @@ additionalImages:
 	}
 	if got.Image != ".data.sidecar" {
 		t.Fatalf("unexpected image selector: %q", got.Image)
+	}
+
+	imageValues, ok := cfg.DummyValues["image"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested image dummy values, got %#v", cfg.DummyValues["image"])
+	}
+	if imageValues["repository"] != "ghcr.io/example/api" {
+		t.Fatalf("unexpected dummy repository: %#v", imageValues["repository"])
+	}
+	if imageValues["tag"] != "latest" {
+		t.Fatalf("unexpected dummy tag: %#v", imageValues["tag"])
 	}
 }

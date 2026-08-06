@@ -12,6 +12,7 @@ import (
 	cranecmd "github.com/google/go-containerregistry/cmd/crane/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/yaml"
 )
 
 const version = "dev"
@@ -186,6 +187,11 @@ func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.
 }
 
 func runGenerate(stdout io.Writer, cfg config) error {
+	bomConfig, err := bomrc.Load(cfg.chartPath)
+	if err != nil {
+		return err
+	}
+
 	chartName, err := helm.ChartName(cfg.chartPath)
 	if err != nil {
 		return err
@@ -195,12 +201,21 @@ func runGenerate(stdout io.Writer, cfg config) error {
 		cfg.releaseName = chartName
 	}
 
+	valuesFiles := append([]string(nil), cfg.valuesFiles...)
+	cleanup, err := prependDummyValuesFile(&valuesFiles, bomConfig.DummyValues)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
 	renderer := helm.Renderer{}
 	manifest, err := renderer.Template(helm.TemplateRequest{
 		ChartPath:   cfg.chartPath,
 		ReleaseName: cfg.releaseName,
 		Namespace:   cfg.namespace,
-		ValuesFiles: cfg.valuesFiles,
+		ValuesFiles: valuesFiles,
 		SetValues:   cfg.setValues,
 		SetStrings:  cfg.setStrings,
 		ExtraArgs:   cfg.helmArgs,
@@ -210,11 +225,6 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	}
 
 	refs, err := images.Extract(manifest)
-	if err != nil {
-		return err
-	}
-
-	bomConfig, err := bomrc.Load(cfg.chartPath)
 	if err != nil {
 		return err
 	}
@@ -237,7 +247,7 @@ func runGenerate(stdout io.Writer, cfg config) error {
 				ChartName:   chartName,
 				ReleaseName: cfg.releaseName,
 				Namespace:   cfg.namespace,
-				ValuesFiles: cfg.valuesFiles,
+				ValuesFiles: valuesFiles,
 				SetValues:   cfg.setValues,
 				SetStrings:  cfg.setStrings,
 				HelmArgs:    cfg.helmArgs,
@@ -264,6 +274,39 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	}
 
 	return formatter.Format(stdout, document)
+}
+
+func prependDummyValuesFile(valuesFiles *[]string, dummyValues map[string]any) (func(), error) {
+	if len(dummyValues) == 0 {
+		return nil, nil
+	}
+
+	content, err := yaml.Marshal(dummyValues)
+	if err != nil {
+		return nil, fmt.Errorf("marshal .bomrc.yml dummyValues: %w", err)
+	}
+
+	file, err := os.CreateTemp("", "helm-bom-dummy-values-*.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("create dummy values file: %w", err)
+	}
+
+	if _, err := file.Write(content); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return nil, fmt.Errorf("write dummy values file: %w", err)
+	}
+
+	if err := file.Close(); err != nil {
+		_ = os.Remove(file.Name())
+		return nil, fmt.Errorf("close dummy values file: %w", err)
+	}
+
+	*valuesFiles = append([]string{file.Name()}, *valuesFiles...)
+
+	return func() {
+		_ = os.Remove(file.Name())
+	}, nil
 }
 
 func runCheck(stdout io.Writer, cfg checkConfig) error {
