@@ -1,20 +1,15 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
 	"github.com/codesphere-cloud/helm-bom/internal/helm"
 	"github.com/codesphere-cloud/helm-bom/internal/images"
 	"github.com/codesphere-cloud/helm-bom/internal/sbom"
-	dockerconfig "github.com/docker/cli/cli/config"
-	"github.com/docker/cli/cli/config/types"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
+	cranecmd "github.com/google/go-containerregistry/cmd/crane/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -66,7 +61,7 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			"  helm-bom generate ./chart --format csbom-json --output bom.json\n" +
 			"  helm-bom check bom.json\n" +
 			"  helm-bom generate ./chart --release-name my-release --namespace production",
-		Args: cobra.MaximumNArgs(1),
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -177,7 +172,7 @@ func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRegistryLogin(cmd.InOrStdin(), cmd.OutOrStdout(), *cfg, os.Getenv("DOCKER_CONFIG"))
+			return runRegistryLogin(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), *cfg)
 		},
 	}
 
@@ -298,57 +293,59 @@ func runCheckWithValidator(stdout io.Writer, cfg checkConfig, validator func([]i
 	return err
 }
 
-func runRegistryLogin(stdin io.Reader, stdout io.Writer, cfg registryLoginConfig, dockerConfigDir string) error {
+func runRegistryLogin(stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg registryLoginConfig) error {
+	restore, err := prepareCraneLoginStdin(stdin, cfg.passwordStdin)
+	if err != nil {
+		return err
+	}
+	if restore != nil {
+		defer restore()
+	}
+
+	cmd := cranecmd.NewCmdAuthLogin("helm-bom registry")
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetIn(stdin)
+
+	args := []string{cfg.server, "--username", cfg.username}
 	if cfg.passwordStdin {
-		contents, err := io.ReadAll(stdin)
-		if err != nil {
-			return fmt.Errorf("read password from stdin: %w", err)
-		}
-
-		cfg.password = strings.TrimRight(string(contents), "\r\n")
+		args = append(args, "--password-stdin")
+	} else {
+		args = append(args, "--password", cfg.password)
 	}
 
-	if cfg.username == "" || cfg.password == "" {
-		return errors.New("username and password required")
-	}
-
-	serverAddress, err := normalizeRegistryServer(cfg.server)
-	if err != nil {
-		return err
-	}
-
-	cf, err := dockerconfig.Load(dockerConfigDir)
-	if err != nil {
-		return err
-	}
-
-	credentialKey := serverAddress
-	if serverAddress == name.DefaultRegistry {
-		credentialKey = authn.DefaultAuthKey
-	}
-
-	creds := cf.GetCredentialsStore(serverAddress)
-	if err := creds.Store(types.AuthConfig{
-		ServerAddress: credentialKey,
-		Username:      cfg.username,
-		Password:      cfg.password,
-	}); err != nil {
-		return err
-	}
-
-	if err := cf.Save(); err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintf(stdout, "logged in to %s via %s\n", serverAddress, cf.Filename)
-	return err
+	cmd.SetArgs(args)
+	return cmd.Execute()
 }
 
-func normalizeRegistryServer(server string) (string, error) {
-	registry, err := name.NewRegistry(server)
-	if err != nil {
-		return "", fmt.Errorf("parse registry %q: %w", server, err)
+func prepareCraneLoginStdin(stdin io.Reader, passwordStdin bool) (func(), error) {
+	if !passwordStdin {
+		return nil, nil
 	}
 
-	return registry.Name(), nil
+	file, err := os.CreateTemp("", "helm-bom-registry-login-*")
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := io.Copy(file, stdin); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return nil, err
+	}
+
+	if _, err := file.Seek(0, 0); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return nil, err
+	}
+
+	original := os.Stdin
+	os.Stdin = file
+
+	return func() {
+		os.Stdin = original
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}, nil
 }

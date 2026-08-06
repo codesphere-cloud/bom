@@ -46,3 +46,29 @@ jobs:
 
       - name: End-to-End Test
         run: make test-e2e
+
+      - name: Build Action Container
+        run: docker build -t helm-bom-action .
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Action Container
+        run: docker build -t helm-bom-action .
+
+      - name: Run Generate Mode In Container
+        run: |
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            helm-bom-action \
+            --mode=generate \
+            --paths=testdata/charts/* \
+            --changed-only=false
+
+      - name: Verify Generated BOM
+        run: test -f testdata/charts/e2e/bom.json

@@ -45,13 +45,14 @@ components:
 
 func TestRunRegistryLoginStoresCredentials(t *testing.T) {
 	dockerConfigDir := t.TempDir()
+	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
 
 	var stdout bytes.Buffer
-	err := runRegistryLogin(strings.NewReader(""), &stdout, registryLoginConfig{
+	err := runRegistryLogin(strings.NewReader(""), &stdout, &stdout, registryLoginConfig{
 		server:   "ghcr.io",
 		username: "alice",
 		password: "secret",
-	}, dockerConfigDir)
+	})
 	if err != nil {
 		t.Fatalf("runRegistryLogin returned error: %v", err)
 	}
@@ -74,20 +75,17 @@ func TestRunRegistryLoginStoresCredentials(t *testing.T) {
 	if auth.Username != "alice" || auth.Password != "secret" {
 		t.Fatalf("unexpected auth config: %#v", auth)
 	}
-
-	if !strings.Contains(stdout.String(), "logged in to ghcr.io") {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
-	}
 }
 
 func TestRunRegistryLoginReadsPasswordFromStdin(t *testing.T) {
 	dockerConfigDir := t.TempDir()
+	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
 
-	err := runRegistryLogin(strings.NewReader("hunter2\n"), &bytes.Buffer{}, registryLoginConfig{
+	err := runRegistryLogin(strings.NewReader("hunter2\n"), &bytes.Buffer{}, &bytes.Buffer{}, registryLoginConfig{
 		server:        "docker.io",
 		username:      "bob",
 		passwordStdin: true,
-	}, dockerConfigDir)
+	})
 	if err != nil {
 		t.Fatalf("runRegistryLogin returned error: %v", err)
 	}

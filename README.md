@@ -183,3 +183,76 @@ printf '%s\n' "$TOKEN" | go run ./cmd/helm-bom registry login ghcr.io -u "$USER"
 ```
 
 Credentials are stored in the Docker config used by `crane` and the Docker CLI, honoring `DOCKER_CONFIG` when it is set.
+
+## GitHub Action
+
+This repository also ships a container-based GitHub Action defined by [action.yml](/Users/schrodit/dev/cs/helm-bom/action.yml) and built from [Dockerfile](/Users/schrodit/dev/cs/helm-bom/Dockerfile). The published Action pulls `ghcr.io/codesphere-cloud/helm-bom:latest`.
+
+The Action supports two modes:
+
+- `generate` to render charts and write BOMs
+- `check` to validate existing BOM files against upstream registries
+
+### Generate BOMs In CI
+
+```yaml
+jobs:
+  bom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: codesphere-cloud/helm-bom@main
+        with:
+          mode: generate
+          paths: |
+            charts/*
+          changed-only: true
+```
+
+When `changed-only: true` is set in `generate` mode, the Action only runs charts whose directories contain files changed by the current push or pull request. Each generated BOM is written into the matching chart directory as `bom.json` or `bom.yaml`, depending on `format`. If `paths` is omitted, the Action discovers charts from the repository root automatically.
+
+### Check BOMs In CI
+
+```yaml
+jobs:
+  validate-boms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: codesphere-cloud/helm-bom@main
+        with:
+          mode: check
+          paths: |
+            charts/*/bom.json
+          changed-only: true
+          registry-server: ghcr.io
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+```
+
+When `changed-only: true` is set in `check` mode, the Action only validates BOM files that were themselves changed by the current push or pull request. If `paths` is omitted, the Action discovers BOM files from the repository root automatically.
+
+The Action writes three outputs:
+
+- `changed-paths`
+- `matched-paths`
+- `processed-paths`
+
+## Image Release Flow
+
+Two GitHub workflows manage the Action container image:
+
+- [.github/workflows/action-image.yml](/Users/schrodit/dev/cs/helm-bom/.github/workflows/action-image.yml) builds the image on pull requests and pushes to `main` without publishing it.
+- [.github/workflows/action-release.yml](/Users/schrodit/dev/cs/helm-bom/.github/workflows/action-release.yml) publishes the image to GHCR when a tag matching `v*` is pushed.
+
+The tag release workflow publishes:
+
+- the exact tag version
+- major/minor semver aliases
+- `latest`

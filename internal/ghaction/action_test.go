@@ -1,0 +1,250 @@
+package ghaction
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
+)
+
+func TestResolveGitRangeForPullRequest(t *testing.T) {
+	eventPath := filepath.Join(t.TempDir(), "event.json")
+	content := `{"pull_request":{"base":{"sha":"base123"},"head":{"sha":"head456"}}}`
+	if err := os.WriteFile(eventPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write event payload: %v", err)
+	}
+
+	base, head, err := resolveGitRange(Config{}, os.ReadFile, func(key string) (string, bool) {
+		switch key {
+		case "GITHUB_EVENT_NAME":
+			return "pull_request", true
+		case "GITHUB_EVENT_PATH":
+			return eventPath, true
+		default:
+			return "", false
+		}
+	})
+	if err != nil {
+		t.Fatalf("resolveGitRange returned error: %v", err)
+	}
+
+	if base != "base123" || head != "head456" {
+		t.Fatalf("unexpected range: %s..%s", base, head)
+	}
+}
+
+func TestChangedPathsBetweenCommits(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	repo, err := git.PlainInit(repoRoot, false)
+	if err != nil {
+		t.Fatalf("PlainInit returned error: %v", err)
+	}
+
+	writeFile := func(path string, content string) {
+		t.Helper()
+
+		absolutePath := filepath.Join(repoRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll returned error: %v", err)
+		}
+		if err := os.WriteFile(absolutePath, []byte(content), 0o600); err != nil {
+			t.Fatalf("WriteFile returned error: %v", err)
+		}
+	}
+
+	commitAll := func(message string, paths ...string) string {
+		t.Helper()
+
+		worktree, err := repo.Worktree()
+		if err != nil {
+			t.Fatalf("Worktree returned error: %v", err)
+		}
+		for _, path := range paths {
+			if _, err := worktree.Add(path); err != nil {
+				t.Fatalf("Add(%s) returned error: %v", path, err)
+			}
+		}
+
+		hash, err := worktree.Commit(message, &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "Test",
+				Email: "test@example.com",
+				When:  time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC),
+			},
+		})
+		if err != nil {
+			t.Fatalf("Commit returned error: %v", err)
+		}
+
+		return hash.String()
+	}
+
+	writeFile("charts/api/Chart.yaml", "name: api\n")
+	writeFile("README.md", "before\n")
+	baseSHA := commitAll("base", "charts/api/Chart.yaml", "README.md")
+
+	writeFile("charts/api/values.yaml", "replicas: 2\n")
+	writeFile("README.md", "after\n")
+	headSHA := commitAll("head", "charts/api/values.yaml", "README.md")
+
+	got, err := changedPathsBetweenCommits(context.Background(), repoRoot, baseSHA, headSHA)
+	if err != nil {
+		t.Fatalf("changedPathsBetweenCommits returned error: %v", err)
+	}
+
+	want := []string{"README.md", "charts/api/values.yaml"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("unexpected changed paths:\nwant: %v\ngot:  %v", want, got)
+	}
+}
+
+func TestResolveGenerateTargetsDiscoversCharts(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "charts", "api"), 0o755); err != nil {
+		t.Fatalf("mkdir chart: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "charts", "worker"), 0o755); err != nil {
+		t.Fatalf("mkdir chart: %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "api", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "worker", "Chart.yaml"),
+	} {
+		if err := os.WriteFile(path, []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	targets, err := resolveGenerateTargets(repoRoot, nil, os.Stat, filepath.WalkDir)
+	if err != nil {
+		t.Fatalf("resolveGenerateTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api", "charts/worker"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestResolveGenerateTargetsSupportsGlobs(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(repoRoot, "charts", "api"),
+		filepath.Join(repoRoot, "charts", "worker"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir chart: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	targets, err := resolveGenerateTargets(repoRoot, []string{"charts/*"}, os.Stat, filepath.WalkDir)
+	if err != nil {
+		t.Fatalf("resolveGenerateTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api", "charts/worker"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestFilterGenerateTargetsByChangedPaths(t *testing.T) {
+	targets := []string{"charts/api", "charts/worker"}
+	changed := []string{"charts/api/values.yaml", "README.md"}
+
+	got := filterGenerateTargetsByChangedPaths(targets, changed)
+	want := []string{"charts/api"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("unexpected filtered targets:\nwant: %v\ngot:  %v", want, got)
+	}
+}
+
+func TestResolveCheckTargetsExpandsDirectories(t *testing.T) {
+	repoRoot := t.TempDir()
+	bomDir := filepath.Join(repoRoot, "boms")
+	if err := os.MkdirAll(bomDir, 0o755); err != nil {
+		t.Fatalf("mkdir bom dir: %v", err)
+	}
+
+	files := []string{
+		filepath.Join(bomDir, "app.json"),
+		filepath.Join(bomDir, "worker.yaml"),
+	}
+	for _, path := range files {
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	targets, err := resolveCheckTargets(repoRoot, []string{"boms"}, os.Stat, filepath.WalkDir)
+	if err != nil {
+		t.Fatalf("resolveCheckTargets returned error: %v", err)
+	}
+
+	want := []string{"boms/app.json", "boms/worker.yaml"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestResolveCheckTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "api", "bom.json"),
+		filepath.Join(repoRoot, "charts", "worker", "bom.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir bom dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	targets, err := resolveCheckTargets(repoRoot, nil, os.Stat, filepath.WalkDir)
+	if err != nil {
+		t.Fatalf("resolveCheckTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected discovered check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestBuildGenerateOutputPath(t *testing.T) {
+	got := buildGenerateOutputPath("charts/api", "csbom-yaml")
+	want := filepath.Join("charts", "api", "bom.yaml")
+	if got != want {
+		t.Fatalf("unexpected output path:\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+func TestRenderSummary(t *testing.T) {
+	summary := renderSummary("generate", Result{
+		ChangedPaths:   []string{"charts/api/values.yaml"},
+		MatchedPaths:   []string{"charts/api"},
+		ProcessedPaths: []string{"charts/api/bom.json"},
+	})
+
+	for _, fragment := range []string{
+		"helm-bom action `generate`",
+		"Changed paths: 1",
+		"Matched paths: 1",
+		"Processed paths: 1",
+	} {
+		if !strings.Contains(summary, fragment) {
+			t.Fatalf("summary missing %q:\n%s", fragment, summary)
+		}
+	}
+}

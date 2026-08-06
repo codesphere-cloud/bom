@@ -1,0 +1,68 @@
+name: helm-bom
+description: Generate Helm chart BOMs or validate BOM image references inside GitHub Actions.
+inputs:
+  mode:
+    description: 'Action mode: generate or check.'
+    required: true
+  paths:
+    description: Newline-separated chart paths for generate mode or BOM file or directory paths for check mode. Glob patterns are supported.
+    required: false
+    default: ""
+  changed-only:
+    description: Restrict processing to paths changed in the current push or pull request.
+    required: false
+    default: "false"
+  format:
+    description: Output format used in generate mode.
+    required: false
+    default: csbom-yaml
+  release-name:
+    description: Optional Helm release name override for generate mode.
+    required: false
+    default: ""
+  namespace:
+    description: Helm namespace used for generate mode.
+    required: false
+    default: default
+  validate-configured-image-exists:
+    description: Fail generate mode when configured additional images do not resolve.
+    required: false
+    default: "false"
+  registry-server:
+    description: Optional registry server to log in to before running checks.
+    required: false
+    default: ""
+  registry-username:
+    description: Optional registry username used with registry-server.
+    required: false
+    default: ""
+  registry-password:
+    description: Optional registry password used with registry-server.
+    required: false
+    default: ""
+  fail-on-no-matches:
+    description: Fail instead of succeeding when no paths match the configured filters.
+    required: false
+    default: "false"
+outputs:
+  changed-paths:
+    description: Newline-separated changed paths considered by the action.
+  matched-paths:
+    description: Newline-separated chart or BOM paths selected after filtering.
+  processed-paths:
+    description: Newline-separated generated BOM files or checked BOM paths.
+runs:
+  using: docker
+  image: docker://ghcr.io/codesphere-cloud/helm-bom:latest
+  args:
+    - --mode=${{ inputs.mode }}
+    - --paths=${{ inputs.paths }}
+    - --changed-only=${{ inputs.changed-only }}
+    - --format=${{ inputs.format }}
+    - --release-name=${{ inputs.release-name }}
+    - --namespace=${{ inputs.namespace }}
+    - --validate-configured-image-exists=${{ inputs.validate-configured-image-exists }}
+    - --registry-server=${{ inputs.registry-server }}
+    - --registry-username=${{ inputs.registry-username }}
+    - --registry-password=${{ inputs.registry-password }}
+    - --fail-on-no-matches=${{ inputs.fail-on-no-matches }}

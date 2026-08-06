@@ -15,6 +15,9 @@ check-tools: ## Verify required external tools are installed
 build: check-tools ## Build the helm-bom binary
 	go build -o bin/helm-bom ./cmd/helm-bom
 
+build-action: check-tools ## Build the helm-bom binary
+	go build -o bin/helm-bom-action ./cmd/helm-bom-action
+
 test: check-tools ## Run all Go tests
 	go test ./...
 
