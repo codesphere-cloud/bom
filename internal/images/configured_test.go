@@ -39,7 +39,7 @@ data:
 			},
 			Image: `.data.sidecars[] | select(.name == "metrics") | .image`,
 		},
-	})
+	}, ExtractConfiguredOptions{})
 	if err != nil {
 		t.Fatalf("ExtractConfigured returned error: %v", err)
 	}
@@ -77,7 +77,7 @@ data:
 			},
 			Image: `.data.sidecars[] | select(.name == "logs") | .image`,
 		},
-	})
+	}, ExtractConfiguredOptions{ValidateExists: true})
 	if err == nil {
 		t.Fatal("expected error")
 	}

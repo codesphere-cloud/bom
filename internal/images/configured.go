@@ -2,6 +2,7 @@ package images
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -13,7 +14,13 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
-func ExtractConfigured(manifest []byte, entries []bomrc.AdditionalImage) ([]ImageRef, error) {
+var errConfiguredImageNotFound = errors.New("configured image not found")
+
+type ExtractConfiguredOptions struct {
+	ValidateExists bool
+}
+
+func ExtractConfigured(manifest []byte, entries []bomrc.AdditionalImage, opts ExtractConfiguredOptions) ([]ImageRef, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -27,6 +34,9 @@ func ExtractConfigured(manifest []byte, entries []bomrc.AdditionalImage) ([]Imag
 	for _, entry := range entries {
 		ref, err := extractConfiguredImage(documents, entry)
 		if err != nil {
+			if !opts.ValidateExists && errors.Is(err, errConfiguredImageNotFound) {
+				continue
+			}
 			return nil, err
 		}
 		refs = append(refs, ref)
@@ -99,11 +109,14 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 
 	document := findManifestDocument(documents, entry.Resource)
 	if document == nil {
-		return ImageRef{}, fmt.Errorf("configured image resource not found: %s %s %s", entry.Resource.APIVersion, entry.Resource.Kind, entry.Resource.Name)
+		return ImageRef{}, fmt.Errorf("%w: resource %s %s %s", errConfiguredImageNotFound, entry.Resource.APIVersion, entry.Resource.Kind, entry.Resource.Name)
 	}
 
 	value, err := evalYQSelect(document.object, entry.Image)
 	if err != nil {
+		if isMissingValueError(err) {
+			return ImageRef{}, fmt.Errorf("%w: %s/%s with %q", errConfiguredImageNotFound, entry.Resource.Kind, entry.Resource.Name, entry.Image)
+		}
 		return ImageRef{}, fmt.Errorf("resolve configured image for %s/%s with %q: %w", entry.Resource.Kind, entry.Resource.Name, entry.Image, err)
 	}
 
@@ -116,6 +129,11 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 		fmt.Sprintf("%s/%s configured by .bomrc.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),
 	}
 	return ref, nil
+}
+
+func isMissingValueError(err error) bool {
+	message := err.Error()
+	return message == "expression returned no values" || strings.HasPrefix(message, "field ")
 }
 
 func findManifestDocument(documents []manifestDocument, resource bomrc.ResourceRef) *manifestDocument {
