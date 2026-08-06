@@ -17,6 +17,7 @@ Explicit subcommands are also available:
 
 ```bash
 go run ./cmd/helm-bom generate ./chart --output bom.json
+go run ./cmd/helm-bom registry login ghcr.io -u "$USER" --password-stdin
 go run ./cmd/helm-bom check bom.json
 ```
 
@@ -174,3 +175,11 @@ The formatter remains isolated behind `--format`, so additional SPDX serializati
 - `csbom`
 
 For each image reference found in the BOM, `check` validates that the upstream registry serves a manifest for that reference using `github.com/google/go-containerregistry/pkg/crane.Get`, which delegates to `remote.Get`.
+
+If a registry requires authentication first, log in with:
+
+```bash
+printf '%s\n' "$TOKEN" | go run ./cmd/helm-bom registry login ghcr.io -u "$USER" --password-stdin
+```
+
+Credentials are stored in the Docker config used by `crane` and the Docker CLI, honoring `DOCKER_CONFIG` when it is set.

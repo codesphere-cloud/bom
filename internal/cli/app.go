@@ -1,14 +1,20 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
 	"github.com/codesphere-cloud/helm-bom/internal/helm"
 	"github.com/codesphere-cloud/helm-bom/internal/images"
 	"github.com/codesphere-cloud/helm-bom/internal/sbom"
+	dockerconfig "github.com/docker/cli/cli/config"
+	"github.com/docker/cli/cli/config/types"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -30,6 +36,13 @@ type config struct {
 
 type checkConfig struct {
 	bomPath string
+}
+
+type registryLoginConfig struct {
+	server        string
+	username      string
+	password      string
+	passwordStdin bool
 }
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -76,6 +89,7 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 
 	cmd.AddCommand(newGenerateCommand(stdout, &cfg))
 	cmd.AddCommand(newCheckCommand(stdout, &checkConfig{}))
+	cmd.AddCommand(newRegistryCommand(stdout))
 
 	return cmd
 }
@@ -133,6 +147,45 @@ func newCheckCommand(stdout io.Writer, cfg *checkConfig) *cobra.Command {
 	}
 
 	cmd.SetOut(stdout)
+
+	return cmd
+}
+
+func newRegistryCommand(stdout io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "registry",
+		Short: "Manage registry authentication used for image validation",
+	}
+
+	cmd.SetOut(stdout)
+	cmd.AddCommand(newRegistryLoginCommand(stdout, &registryLoginConfig{}))
+
+	return cmd
+}
+
+func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "login <server>",
+		Short: "Log in to a registry for subsequent image validation",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return cobra.ExactArgs(1)(cmd, args)
+			}
+
+			cfg.server = args[0]
+			return nil
+		},
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRegistryLogin(cmd.InOrStdin(), cmd.OutOrStdout(), *cfg, os.Getenv("DOCKER_CONFIG"))
+		},
+	}
+
+	cmd.SetOut(stdout)
+	flags := cmd.Flags()
+	flags.StringVarP(&cfg.username, "username", "u", "", "Username")
+	flags.StringVarP(&cfg.password, "password", "p", "", "Password")
+	flags.BoolVar(&cfg.passwordStdin, "password-stdin", false, "Take the password from stdin")
 
 	return cmd
 }
@@ -243,4 +296,59 @@ func runCheckWithValidator(stdout io.Writer, cfg checkConfig, validator func([]i
 
 	_, err = fmt.Fprintf(stdout, "validated %d image reference(s)\n", len(refs))
 	return err
+}
+
+func runRegistryLogin(stdin io.Reader, stdout io.Writer, cfg registryLoginConfig, dockerConfigDir string) error {
+	if cfg.passwordStdin {
+		contents, err := io.ReadAll(stdin)
+		if err != nil {
+			return fmt.Errorf("read password from stdin: %w", err)
+		}
+
+		cfg.password = strings.TrimRight(string(contents), "\r\n")
+	}
+
+	if cfg.username == "" || cfg.password == "" {
+		return errors.New("username and password required")
+	}
+
+	serverAddress, err := normalizeRegistryServer(cfg.server)
+	if err != nil {
+		return err
+	}
+
+	cf, err := dockerconfig.Load(dockerConfigDir)
+	if err != nil {
+		return err
+	}
+
+	credentialKey := serverAddress
+	if serverAddress == name.DefaultRegistry {
+		credentialKey = authn.DefaultAuthKey
+	}
+
+	creds := cf.GetCredentialsStore(serverAddress)
+	if err := creds.Store(types.AuthConfig{
+		ServerAddress: credentialKey,
+		Username:      cfg.username,
+		Password:      cfg.password,
+	}); err != nil {
+		return err
+	}
+
+	if err := cf.Save(); err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(stdout, "logged in to %s via %s\n", serverAddress, cf.Filename)
+	return err
+}
+
+func normalizeRegistryServer(server string) (string, error) {
+	registry, err := name.NewRegistry(server)
+	if err != nil {
+		return "", fmt.Errorf("parse registry %q: %w", server, err)
+	}
+
+	return registry.Name(), nil
 }

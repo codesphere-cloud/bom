@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/codesphere-cloud/helm-bom/internal/images"
+	dockerconfig "github.com/docker/cli/cli/config"
 )
 
 func TestRunCheckValidatesBOM(t *testing.T) {
@@ -39,5 +40,69 @@ components:
 
 	if !strings.Contains(stdout.String(), "validated 2 image reference(s)") {
 		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestRunRegistryLoginStoresCredentials(t *testing.T) {
+	dockerConfigDir := t.TempDir()
+
+	var stdout bytes.Buffer
+	err := runRegistryLogin(strings.NewReader(""), &stdout, registryLoginConfig{
+		server:   "ghcr.io",
+		username: "alice",
+		password: "secret",
+	}, dockerConfigDir)
+	if err != nil {
+		t.Fatalf("runRegistryLogin returned error: %v", err)
+	}
+
+	configPath := filepath.Join(dockerConfigDir, "config.json")
+	if _, err := os.ReadFile(configPath); err != nil {
+		t.Fatalf("read docker config: %v", err)
+	}
+
+	cf, err := dockerconfig.Load(dockerConfigDir)
+	if err != nil {
+		t.Fatalf("load docker config: %v", err)
+	}
+
+	auth, err := cf.GetAuthConfig("ghcr.io")
+	if err != nil {
+		t.Fatalf("get auth config: %v", err)
+	}
+
+	if auth.Username != "alice" || auth.Password != "secret" {
+		t.Fatalf("unexpected auth config: %#v", auth)
+	}
+
+	if !strings.Contains(stdout.String(), "logged in to ghcr.io") {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestRunRegistryLoginReadsPasswordFromStdin(t *testing.T) {
+	dockerConfigDir := t.TempDir()
+
+	err := runRegistryLogin(strings.NewReader("hunter2\n"), &bytes.Buffer{}, registryLoginConfig{
+		server:        "docker.io",
+		username:      "bob",
+		passwordStdin: true,
+	}, dockerConfigDir)
+	if err != nil {
+		t.Fatalf("runRegistryLogin returned error: %v", err)
+	}
+
+	cf, err := dockerconfig.Load(dockerConfigDir)
+	if err != nil {
+		t.Fatalf("load docker config: %v", err)
+	}
+
+	auth, err := cf.GetAuthConfig("docker.io")
+	if err != nil {
+		t.Fatalf("get auth config: %v", err)
+	}
+
+	if auth.Username != "bob" || auth.Password != "hunter2" {
+		t.Fatalf("unexpected auth config: %#v", auth)
 	}
 }
