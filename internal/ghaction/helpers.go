@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,31 +31,6 @@ func parseList(raw string) []string {
 		values = append(values, toSlash(part))
 	}
 	return values
-}
-
-func expandPattern(repoRoot string, pattern string) ([]string, error) {
-	if pattern == "" {
-		return nil, nil
-	}
-
-	absPattern := pattern
-	if !filepath.IsAbs(absPattern) {
-		absPattern = filepath.Join(repoRoot, filepath.FromSlash(pattern))
-	}
-
-	if !hasGlob(absPattern) {
-		return []string{absPattern}, nil
-	}
-
-	matches, err := filepath.Glob(absPattern)
-	if err != nil {
-		return nil, err
-	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("path pattern %q did not match any files", pattern)
-	}
-
-	return matches, nil
 }
 
 func hasGlob(pattern string) bool {
@@ -138,6 +114,32 @@ func sortedKeys(values map[string]struct{}) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func canonicalPathSelector(pattern string) string {
+	pattern = strings.TrimSpace(toSlash(pattern))
+	pattern = strings.TrimSuffix(pattern, "/")
+	pattern = strings.TrimSuffix(pattern, "/Chart.yaml")
+	return pattern
+}
+
+func matchesPathPrefix(target string, selector string) bool {
+	selector = canonicalPathSelector(selector)
+	if selector == "" {
+		return false
+	}
+	return target == selector || strings.HasPrefix(target, selector+"/")
+}
+
+func matchesGlob(pattern string, values ...string) bool {
+	glob := toSlash(pattern)
+	for _, value := range values {
+		matched, err := path.Match(glob, toSlash(value))
+		if err == nil && matched {
+			return true
+		}
+	}
+	return false
 }
 
 func toRelativeSlash(repoRoot string, path string) string {

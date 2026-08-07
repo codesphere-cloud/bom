@@ -3,7 +3,6 @@ package ghaction
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -72,33 +71,21 @@ func (r generateRunner) logStartup() {
 }
 
 func (r generateRunner) resolveTargets() ([]string, error) {
+	allTargets, err := r.discoverChartDirs()
+	if err != nil {
+		return nil, err
+	}
+
 	if len(r.configuredPaths) == 0 {
-		return r.discoverChartDirs()
+		return r.excludeTargets(allTargets)
 	}
 
-	targetSet := map[string]struct{}{}
-	for _, pattern := range r.configuredPaths {
-		matches, err := expandPattern(r.repoRoot, pattern)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, match := range matches {
-			info, err := r.deps.Stat(match)
-			if err != nil {
-				return nil, err
-			}
-
-			target, err := normalizeGenerateTarget(r.repoRoot, match, info)
-			if err != nil {
-				return nil, err
-			}
-
-			targetSet[target] = struct{}{}
+	targets := make([]string, 0, len(allTargets))
+	for _, target := range allTargets {
+		if r.matchesConfiguredTarget(target) {
+			targets = append(targets, target)
 		}
 	}
-
-	targets := sortedKeys(targetSet)
 	filteredTargets, err := r.excludeTargets(targets)
 	if err != nil {
 		return nil, err
@@ -167,15 +154,21 @@ func (r generateRunner) logMatchedTargets(targets []string) {
 	logging.LogList(r.logger, "matched chart targets", targets)
 }
 
-func normalizeGenerateTarget(repoRoot string, path string, info fs.FileInfo) (string, error) {
-	if info.IsDir() {
-		return toRelativeSlash(repoRoot, path), nil
-	}
-	if filepath.Base(path) == "Chart.yaml" {
-		return toRelativeSlash(repoRoot, filepath.Dir(path)), nil
-	}
+func (r generateRunner) matchesConfiguredTarget(target string) bool {
+	targetChartFile := target + "/Chart.yaml"
+	for _, pattern := range r.configuredPaths {
+		if hasGlob(pattern) {
+			if matchesGlob(pattern, target, targetChartFile) {
+				return true
+			}
+			continue
+		}
 
-	return "", fmt.Errorf("generate target %q must be a chart directory or Chart.yaml", toRelativeSlash(repoRoot, path))
+		if matchesPathPrefix(target, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 func filterGenerateTargetsByChangedPaths(targets []string, changedPaths []string) []string {
@@ -202,33 +195,29 @@ func (r generateRunner) excludeTargets(targets []string) ([]string, error) {
 		return targets, nil
 	}
 
-	excludedSet := map[string]struct{}{}
-	for _, pattern := range r.excludedPaths {
-		matches, err := expandPattern(r.repoRoot, pattern)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, match := range matches {
-			info, err := r.deps.Stat(match)
-			if err != nil {
-				return nil, err
-			}
-
-			target, err := normalizeGenerateTarget(r.repoRoot, match, info)
-			if err != nil {
-				return nil, err
-			}
-			excludedSet[target] = struct{}{}
-		}
-	}
-
 	filtered := make([]string, 0, len(targets))
 	for _, target := range targets {
-		if _, ok := excludedSet[target]; ok {
+		if r.matchesExcludedTarget(target) {
 			continue
 		}
 		filtered = append(filtered, target)
 	}
 	return filtered, nil
+}
+
+func (r generateRunner) matchesExcludedTarget(target string) bool {
+	targetChartFile := target + "/Chart.yaml"
+	for _, pattern := range r.excludedPaths {
+		if hasGlob(pattern) {
+			if matchesGlob(pattern, target, targetChartFile) {
+				return true
+			}
+			continue
+		}
+
+		if matchesPathPrefix(target, pattern) {
+			return true
+		}
+	}
+	return false
 }

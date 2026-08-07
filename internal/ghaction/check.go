@@ -3,7 +3,6 @@ package ghaction
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -87,47 +86,21 @@ func (r checkRunner) loginRegistry() error {
 }
 
 func (r checkRunner) resolveTargets() ([]string, error) {
+	allTargets, err := r.discoverBOMPaths()
+	if err != nil {
+		return nil, err
+	}
+
 	if len(r.configuredPaths) == 0 {
-		return r.discoverBOMPaths()
+		return r.excludeTargets(allTargets)
 	}
 
-	targetSet := map[string]struct{}{}
-	for _, pattern := range r.configuredPaths {
-		matches, err := expandPattern(r.repoRoot, pattern)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, match := range matches {
-			info, err := r.deps.Stat(match)
-			if err != nil {
-				return nil, err
-			}
-
-			if info.IsDir() {
-				if err := r.deps.WalkDir(match, func(path string, entry fs.DirEntry, walkErr error) error {
-					if walkErr != nil {
-						return walkErr
-					}
-					if entry.IsDir() || !isSupportedBOMFile(path) {
-						return nil
-					}
-					targetSet[toRelativeSlash(r.repoRoot, path)] = struct{}{}
-					return nil
-				}); err != nil {
-					return nil, err
-				}
-				continue
-			}
-
-			if !isSupportedBOMFile(match) {
-				return nil, fmt.Errorf("check target %q is not a supported BOM file", toRelativeSlash(r.repoRoot, match))
-			}
-			targetSet[toRelativeSlash(r.repoRoot, match)] = struct{}{}
+	targets := make([]string, 0, len(allTargets))
+	for _, target := range allTargets {
+		if r.matchesConfiguredTarget(target) {
+			targets = append(targets, target)
 		}
 	}
-
-	targets := sortedKeys(targetSet)
 	filteredTargets, err := r.excludeTargets(targets)
 	if err != nil {
 		return nil, err
@@ -156,6 +129,22 @@ func (r checkRunner) logMatchedTargets(targets []string) {
 	logging.LogList(r.logger, "matched BOM targets", targets)
 }
 
+func (r checkRunner) matchesConfiguredTarget(target string) bool {
+	for _, pattern := range r.configuredPaths {
+		if hasGlob(pattern) {
+			if matchesGlob(pattern, target) {
+				return true
+			}
+			continue
+		}
+
+		if matchesPathPrefix(target, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 func filterCheckTargetsByChangedPaths(targets []string, changedPaths []string) []string {
 	if len(changedPaths) == 0 {
 		return targets
@@ -181,47 +170,28 @@ func (r checkRunner) excludeTargets(targets []string) ([]string, error) {
 		return targets, nil
 	}
 
-	excludedSet := map[string]struct{}{}
-	for _, pattern := range r.excludedPaths {
-		matches, err := expandPattern(r.repoRoot, pattern)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, match := range matches {
-			info, err := r.deps.Stat(match)
-			if err != nil {
-				return nil, err
-			}
-
-			if info.IsDir() {
-				if err := r.deps.WalkDir(match, func(path string, entry fs.DirEntry, walkErr error) error {
-					if walkErr != nil {
-						return walkErr
-					}
-					if entry.IsDir() || !isSupportedBOMFile(path) {
-						return nil
-					}
-					excludedSet[toRelativeSlash(r.repoRoot, path)] = struct{}{}
-					return nil
-				}); err != nil {
-					return nil, err
-				}
-				continue
-			}
-
-			if isSupportedBOMFile(match) {
-				excludedSet[toRelativeSlash(r.repoRoot, match)] = struct{}{}
-			}
-		}
-	}
-
 	filtered := make([]string, 0, len(targets))
 	for _, target := range targets {
-		if _, ok := excludedSet[target]; ok {
+		if r.matchesExcludedTarget(target) {
 			continue
 		}
 		filtered = append(filtered, target)
 	}
 	return filtered, nil
+}
+
+func (r checkRunner) matchesExcludedTarget(target string) bool {
+	for _, pattern := range r.excludedPaths {
+		if hasGlob(pattern) {
+			if matchesGlob(pattern, target) {
+				return true
+			}
+			continue
+		}
+
+		if matchesPathPrefix(target, pattern) {
+			return true
+		}
+	}
+	return false
 }

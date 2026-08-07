@@ -221,6 +221,44 @@ func TestGenerateResolveTargetsDiscoversCharts(t *testing.T) {
 	}
 }
 
+func TestGenerateResolveTargetsAppliesExcludesWhenIncludePathsEmpty(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "api", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "pc-applications", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "worker", "Chart.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir chart dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"charts/pc-applications"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api", "charts/worker"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected targets with excludes and empty includes:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
 func TestGenerateResolveTargetsSupportsGlobs(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, dir := range []string{
@@ -255,6 +293,44 @@ func TestGenerateResolveTargetsSupportsGlobs(t *testing.T) {
 	want := []string{"charts/api", "charts/worker"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestGenerateResolveTargetsSupportsPrefixes(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(repoRoot, "charts", "team-a", "api"),
+		filepath.Join(repoRoot, "charts", "team-a", "worker"),
+		filepath.Join(repoRoot, "charts", "team-b", "web"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir chart: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"charts/team-a"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/team-a/api", "charts/team-a/worker"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected prefix-matched generate targets:\nwant: %v\ngot:  %v", want, targets)
 	}
 }
 
@@ -294,6 +370,45 @@ func TestGenerateResolveTargetsExcludesPaths(t *testing.T) {
 	want := []string{"charts/api"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected excluded generate targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestGenerateResolveTargetsExcludesPrefixes(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "team-a", "api", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "team-a", "worker", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "team-b", "web", "Chart.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir chart dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"charts"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"charts/team-a"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/team-b/web"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected prefix-excluded generate targets:\nwant: %v\ngot:  %v", want, targets)
 	}
 }
 
@@ -347,6 +462,44 @@ func TestCheckResolveTargetsExpandsDirectories(t *testing.T) {
 	}
 }
 
+func TestCheckResolveTargetsSupportsPrefixes(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "boms", "team-a", "app.json"),
+		filepath.Join(repoRoot, "boms", "team-a", "worker.yaml"),
+		filepath.Join(repoRoot, "boms", "team-b", "web.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir bom parent: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"boms/team-a"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"boms/team-a/app.json", "boms/team-a/worker.yaml"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected prefix-matched check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
 func TestCheckResolveTargetsExcludesPaths(t *testing.T) {
 	repoRoot := t.TempDir()
 	bomDir := filepath.Join(repoRoot, "boms")
@@ -391,6 +544,45 @@ func TestCheckResolveTargetsExcludesPaths(t *testing.T) {
 	}
 }
 
+func TestCheckResolveTargetsExcludesPrefixes(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "boms", "team-a", "app.json"),
+		filepath.Join(repoRoot, "boms", "team-a", "worker.yaml"),
+		filepath.Join(repoRoot, "boms", "team-b", "web.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir bom parent: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"boms"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"boms/team-a"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"boms/team-b/web.yaml"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected prefix-excluded check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
 func TestCheckResolveTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, path := range []string{
@@ -424,6 +616,44 @@ func TestCheckResolveTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected discovered check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestCheckResolveTargetsAppliesExcludesWhenIncludePathsEmpty(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "api", "bom.json"),
+		filepath.Join(repoRoot, "charts", "pc-applications", "bom.json"),
+		filepath.Join(repoRoot, "charts", "worker", "bom.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir bom dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"charts/pc-applications"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected check targets with excludes and empty includes:\nwant: %v\ngot:  %v", want, targets)
 	}
 }
 

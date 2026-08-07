@@ -47,8 +47,8 @@ jobs:
 
 Generate-specific inputs:
 
-- `include-paths`: newline-separated chart paths or glob patterns to include. If omitted, the Action auto-discovers chart directories from the repository root.
-- `exclude-paths`: newline-separated chart paths or glob patterns to exclude after discovery or glob expansion
+- `include-paths`: newline-separated chart selectors to include. Selectors can be exact paths, path prefixes, or glob patterns. If omitted, the Action auto-discovers chart directories from the repository root.
+- `exclude-paths`: newline-separated chart selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only process charts whose directories contain files changed in the current push or pull request
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
 - `format`: output format. Default: `csbom-v2-json`
@@ -228,8 +228,8 @@ jobs:
 
 Check-specific inputs:
 
-- `include-paths`: newline-separated BOM file, directory, or glob paths to include. If omitted, the Action auto-discovers BOM files from the repository root.
-- `exclude-paths`: newline-separated BOM file, directory, or glob paths to exclude after discovery or glob expansion
+- `include-paths`: newline-separated BOM selectors to include. Selectors can be exact paths, path prefixes, or glob patterns. If omitted, the Action auto-discovers BOM files from the repository root.
+- `exclude-paths`: newline-separated BOM selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only validate BOM files that were changed in the current push or pull request
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
 - `registry-server`: optional registry server to log in to before validation
