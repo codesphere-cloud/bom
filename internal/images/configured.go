@@ -124,6 +124,9 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 	if !ok {
 		return ImageRef{}, fmt.Errorf("configured image selector %q returned non-image value %q", entry.Image, value)
 	}
+	if key := strings.TrimSpace(entry.Key); key != "" {
+		ref.Repository = key
+	}
 
 	ref.Sources = []string{
 		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),

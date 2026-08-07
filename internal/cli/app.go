@@ -235,6 +235,7 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	if err != nil {
 		return err
 	}
+	refs = images.MapRepositories(refs, bomConfig.ImageKeyMappings)
 
 	configuredRefs, err := images.ExtractConfigured(manifest, bomConfig.AdditionalImages, images.ExtractConfiguredOptions{
 		ValidateExists: cfg.validateConfiguredImageExist,

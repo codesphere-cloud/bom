@@ -13,11 +13,13 @@ var fileNames = []string{".bomrc.yml", ".bomrc.yaml"}
 
 type Config struct {
 	AdditionalImages []AdditionalImage `json:"additionalImages"`
+	ImageKeyMappings map[string]string `json:"imageKeyMappings,omitempty"`
 	DummyValues      map[string]any    `json:"dummyValues,omitempty"`
 }
 
 type AdditionalImage struct {
 	Resource ResourceRef `json:"resource"`
+	Key      string      `json:"key,omitempty"`
 	Image    string      `json:"image"`
 }
 

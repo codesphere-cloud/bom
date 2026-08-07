@@ -155,7 +155,12 @@ additionalImages:
       apiVersion: v1
       kind: ConfigMap
       name: extra-images
+    key: metrics
     image: .data.sidecars[] | select(.name == "metrics") | .image
+
+imageKeyMappings:
+  ghcr.io/acme/api: api
+  docker.io/library/busybox: busybox
 ```
 
 `dummyValues` is optional. When present, `helm-bom` writes it to a temporary Helm values file and passes it before any CLI-supplied `--values` files, so explicit user inputs still override these placeholders.
@@ -163,8 +168,11 @@ additionalImages:
 Each `additionalImages` entry:
 
 - selects one rendered Kubernetes resource by `apiVersion`, `kind`, and `metadata.name`
+- may optionally set `key` to override the BOM key used for that configured image
 - evaluates the `image` field as a yq-style selector against that resource
 - must resolve to exactly one string image reference
+
+`imageKeyMappings` is optional. It remaps the BOM key used for auto-discovered image repositories in `csbom-json` and `csbom-yaml` output. Mapping keys are exact auto-discovered repository names, and mapping values are the keys that should be written into the BOM.
 
 Image reference parsing uses Docker’s upstream `github.com/distribution/reference` package.
 

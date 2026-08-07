@@ -37,6 +37,7 @@ data:
 				Kind:       "ConfigMap",
 				Name:       "extra-images",
 			},
+			Key:   "metrics",
 			Image: `.data.sidecars[] | select(.name == "metrics") | .image`,
 		},
 	}, ExtractConfiguredOptions{})
@@ -53,6 +54,11 @@ data:
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected refs:\nwant: %v\ngot:  %v", want, got)
+	}
+	for _, ref := range refs {
+		if ref.Reference == "ghcr.io/acme/metrics:4.5.6" && ref.Repository != "metrics" {
+			t.Fatalf("expected configured key override, got repository %q", ref.Repository)
+		}
 	}
 }
 

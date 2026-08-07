@@ -24,7 +24,10 @@ additionalImages:
       apiVersion: v1
       kind: ConfigMap
       name: extra-images
+    key: sidecar
     image: .data.sidecar
+imageKeyMappings:
+  ghcr.io/example/api: api
 dummyValues:
   image:
     repository: ghcr.io/example/api
@@ -47,8 +50,14 @@ dummyValues:
 	if got.Resource.APIVersion != "v1" || got.Resource.Kind != "ConfigMap" || got.Resource.Name != "extra-images" {
 		t.Fatalf("unexpected resource: %#v", got.Resource)
 	}
+	if got.Key != "sidecar" {
+		t.Fatalf("unexpected configured key: %q", got.Key)
+	}
 	if got.Image != ".data.sidecar" {
 		t.Fatalf("unexpected image selector: %q", got.Image)
+	}
+	if cfg.ImageKeyMappings["ghcr.io/example/api"] != "api" {
+		t.Fatalf("unexpected image key mapping: %#v", cfg.ImageKeyMappings)
 	}
 
 	imageValues, ok := cfg.DummyValues["image"].(map[string]any)
