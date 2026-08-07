@@ -339,12 +339,12 @@ excludePaths:
   - charts/experimental/*/bom.yaml
 allowedRegistries:
   - docker.io
-  - ghcr.io
+  - ghcr.io/codesphere-cloud
   - registry.example.com:5000
 ```
 
 - `excludePaths` uses the same exact-path, directory-prefix, and glob matching as the check Action's `exclude-paths` input. Configured and Action-supplied exclusions are combined.
-- `allowedRegistries` is an exact allowlist of registry hosts, with optional ports. Do not include a URL scheme or repository path. Unqualified image references such as `busybox:latest` resolve to `docker.io`.
+- `allowedRegistries` accepts registry hosts with optional ports and repository path prefixes. A host-only entry allows every repository on that registry; for example, `ghcr.io/codesphere-cloud` allows that repository path and all paths below it, but not `ghcr.io/another-org`. Do not include a URL scheme. Unqualified image references such as `busybox:latest` resolve to `docker.io`.
 - If `allowedRegistries` is omitted or empty, registry allowlist enforcement is disabled for backward compatibility.
 
 The CLI searches for `.bomlint.yml` from the BOM file's directory upward. Registry restrictions apply to every container image and Helm chart OCI reference in supported BOMs. The checker validates the existence of both kinds of reference in their upstream registries.

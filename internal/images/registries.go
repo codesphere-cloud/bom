@@ -2,15 +2,23 @@ package images
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/distribution/reference"
 )
 
+var allowedRegistryDomainRegexp = regexp.MustCompile("^(?:" + reference.DomainRegexp.String() + ")$")
+
 type DisallowedRegistriesError struct {
 	References []string
 	Allowed    []string
+}
+
+type allowedRegistry struct {
+	domain     string
+	pathPrefix string
 }
 
 func (e *DisallowedRegistriesError) Error() string {
@@ -27,21 +35,30 @@ func ValidateAllowedRegistries(refs []ImageRef, allowedRegistries []string) erro
 		return nil
 	}
 
-	allowed := make(map[string]struct{}, len(allowedRegistries))
+	allowed := make(map[string]allowedRegistry, len(allowedRegistries))
 	normalizedAllowed := make([]string, 0, len(allowedRegistries))
 	for _, value := range allowedRegistries {
-		registry := strings.ToLower(strings.TrimSpace(value))
-		if registry == "" {
+		registryPath := strings.ToLower(strings.TrimSpace(value))
+		if registryPath == "" {
 			continue
 		}
-		if strings.Contains(registry, "://") || strings.Contains(registry, "/") {
-			return fmt.Errorf("invalid allowed registry %q: expected a registry host with an optional port", value)
+		if strings.Contains(registryPath, "://") {
+			return fmt.Errorf("invalid allowed registry %q: expected a registry host with an optional port and path prefix", value)
 		}
-		if _, exists := allowed[registry]; exists {
+
+		parts := strings.SplitN(registryPath, "/", 2)
+		entry := allowedRegistry{domain: parts[0]}
+		if len(parts) == 2 {
+			entry.pathPrefix = parts[1]
+		}
+		if !allowedRegistryDomainRegexp.MatchString(entry.domain) || !validRepositoryPath(entry) {
+			return fmt.Errorf("invalid allowed registry %q: expected a registry host with an optional port and path prefix", value)
+		}
+		if _, exists := allowed[registryPath]; exists {
 			continue
 		}
-		allowed[registry] = struct{}{}
-		normalizedAllowed = append(normalizedAllowed, registry)
+		allowed[registryPath] = entry
+		normalizedAllowed = append(normalizedAllowed, registryPath)
 	}
 	if len(allowed) == 0 {
 		return fmt.Errorf("allowedRegistries must contain at least one registry")
@@ -56,7 +73,11 @@ func ValidateAllowedRegistries(refs []ImageRef, allowedRegistries []string) erro
 			return fmt.Errorf("parse OCI reference %q: %w", ref.Reference, err)
 		}
 		registry := strings.ToLower(reference.Domain(named))
-		if _, ok := allowed[registry]; ok {
+		path := strings.ToLower(reference.Path(named))
+		if slices.ContainsFunc(normalizedAllowed, func(value string) bool {
+			entry := allowed[value]
+			return entry.domain == registry && (entry.pathPrefix == "" || path == entry.pathPrefix || strings.HasPrefix(path, entry.pathPrefix+"/"))
+		}) {
 			continue
 		}
 		if _, exists := seen[ref.Reference]; exists {
@@ -71,4 +92,12 @@ func ValidateAllowedRegistries(refs []ImageRef, allowedRegistries []string) erro
 	}
 	slices.Sort(disallowed)
 	return &DisallowedRegistriesError{References: disallowed, Allowed: normalizedAllowed}
+}
+
+func validRepositoryPath(entry allowedRegistry) bool {
+	if entry.pathPrefix == "" {
+		return true
+	}
+	named, err := reference.WithName(entry.domain + "/" + entry.pathPrefix)
+	return err == nil && reference.Domain(named) == entry.domain && reference.Path(named) == entry.pathPrefix
 }

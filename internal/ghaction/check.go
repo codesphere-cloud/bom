@@ -66,6 +66,9 @@ func (r checkRunner) run() error {
 }
 
 func (r checkRunner) logStartup() {
+	if !r.cfg.Debug {
+		return
+	}
 	logging.LogTable(r.logger, "starting check",
 		logging.TableRow{Label: "repository root source", Value: r.repoRootSource},
 		logging.TableRow{Label: "repository root", Value: r.repoRoot},
