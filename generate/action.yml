@@ -1,8 +1,12 @@
 name: helm-bom generate
 description: Generate Helm chart BOMs inside GitHub Actions.
 inputs:
-  paths:
-    description: Newline-separated chart paths for generate mode. Glob patterns are supported.
+  include-paths:
+    description: Newline-separated chart paths to include for generate mode. Glob patterns are supported.
+    required: false
+    default: ""
+  exclude-paths:
+    description: Newline-separated chart paths to exclude from generate mode. Glob patterns are supported.
     required: false
     default: ""
   changed-only:
@@ -95,7 +99,8 @@ runs:
       name: Run helm-bom generate action
       shell: bash
       env:
-        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}
+        INPUT_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_FORMAT: ${{ inputs.format }}
@@ -106,7 +111,8 @@ runs:
       run: |
         "${{ steps.resolve-binary.outputs.binary-path }}" \
           generate \
-          --paths="$INPUT_PATHS" \
+          --include-paths="$INPUT_INCLUDE_PATHS" \
+          --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
           --format="$INPUT_FORMAT" \

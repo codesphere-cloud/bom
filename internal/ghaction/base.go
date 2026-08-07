@@ -3,8 +3,6 @@ package ghaction
 import (
 	"io/fs"
 	"path/filepath"
-
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
 )
 
 func (r baseRunner) discoverChartDirs() ([]string, error) {
@@ -77,8 +75,4 @@ func (r baseRunner) finish(mode string, result Result) error {
 	}
 	r.logger.Infof("completed %s for %d target(s)", mode, len(result.ProcessedPaths))
 	return r.deps.WriteSummary(renderSummary(mode, result))
-}
-
-func logList(logger logging.Logger, label string, values []string) {
-	logging.LogList(logger, label, values)
 }

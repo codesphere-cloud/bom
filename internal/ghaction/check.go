@@ -58,8 +58,10 @@ func (r checkRunner) logStartup() {
 	r.logger.Infof("repository root source: %s", r.repoRootSource)
 	r.logger.Infof("repository root: %s", r.repoRoot)
 	r.logger.Infof("config: changed-only=%t fail-on-no-matches=%t", r.cfg.ChangedOnly, r.cfg.FailOnNoMatches)
-	r.logger.Infof("raw paths input: %q", r.cfg.Paths)
-	logging.LogList(r.logger, "parsed paths input", r.configuredPaths)
+	r.logger.Infof("raw include-paths input: %q", r.cfg.IncludePaths)
+	logging.LogList(r.logger, "parsed include-paths input", r.configuredPaths)
+	r.logger.Infof("raw exclude-paths input: %q", r.cfg.ExcludePaths)
+	logging.LogList(r.logger, "parsed exclude-paths input", r.excludedPaths)
 }
 
 func (r checkRunner) loginRegistry() error {
@@ -125,7 +127,12 @@ func (r checkRunner) resolveTargets() ([]string, error) {
 		}
 	}
 
-	return sortedKeys(targetSet), nil
+	targets := sortedKeys(targetSet)
+	filteredTargets, err := r.excludeTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+	return filteredTargets, nil
 }
 
 func (r checkRunner) runTargets(targets []string) ([]string, error) {
@@ -167,4 +174,54 @@ func filterCheckTargetsByChangedPaths(targets []string, changedPaths []string) [
 	}
 
 	return filtered
+}
+
+func (r checkRunner) excludeTargets(targets []string) ([]string, error) {
+	if len(r.excludedPaths) == 0 {
+		return targets, nil
+	}
+
+	excludedSet := map[string]struct{}{}
+	for _, pattern := range r.excludedPaths {
+		matches, err := expandPattern(r.repoRoot, pattern)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, match := range matches {
+			info, err := r.deps.Stat(match)
+			if err != nil {
+				return nil, err
+			}
+
+			if info.IsDir() {
+				if err := r.deps.WalkDir(match, func(path string, entry fs.DirEntry, walkErr error) error {
+					if walkErr != nil {
+						return walkErr
+					}
+					if entry.IsDir() || !isSupportedBOMFile(path) {
+						return nil
+					}
+					excludedSet[toRelativeSlash(r.repoRoot, path)] = struct{}{}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			if isSupportedBOMFile(match) {
+				excludedSet[toRelativeSlash(r.repoRoot, match)] = struct{}{}
+			}
+		}
+	}
+
+	filtered := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := excludedSet[target]; ok {
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered, nil
 }

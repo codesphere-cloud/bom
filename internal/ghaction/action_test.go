@@ -258,6 +258,45 @@ func TestGenerateResolveTargetsSupportsGlobs(t *testing.T) {
 	}
 }
 
+func TestGenerateResolveTargetsExcludesPaths(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "charts", "api", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "worker", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "skip", "Chart.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir chart dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("name: test\n"), 0o600); err != nil {
+			t.Fatalf("write chart file: %v", err)
+		}
+	}
+
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"charts/*"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"charts/worker", "charts/skip/Chart.yaml"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"charts/api"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected excluded generate targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
 func TestFilterGenerateTargetsByChangedPaths(t *testing.T) {
 	targets := []string{"charts/api", "charts/worker"}
 	changed := []string{"charts/api/values.yaml", "README.md"}
@@ -305,6 +344,50 @@ func TestCheckResolveTargetsExpandsDirectories(t *testing.T) {
 	want := []string{"boms/app.json", "boms/worker.yaml"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected check targets:\nwant: %v\ngot:  %v", want, targets)
+	}
+}
+
+func TestCheckResolveTargetsExcludesPaths(t *testing.T) {
+	repoRoot := t.TempDir()
+	bomDir := filepath.Join(repoRoot, "boms")
+	if err := os.MkdirAll(bomDir, 0o755); err != nil {
+		t.Fatalf("mkdir bom dir: %v", err)
+	}
+
+	for _, path := range []string{
+		filepath.Join(bomDir, "app.json"),
+		filepath.Join(bomDir, "worker.yaml"),
+		filepath.Join(bomDir, "skip", "nested.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir bom parent: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write bom file: %v", err)
+		}
+	}
+
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"boms"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
+		},
+		excludedPaths: []string{"boms/worker.yaml", "boms/skip"},
+	}
+
+	targets, err := runner.resolveTargets()
+	if err != nil {
+		t.Fatalf("resolveTargets returned error: %v", err)
+	}
+
+	want := []string{"boms/app.json"}
+	if !slices.Equal(targets, want) {
+		t.Fatalf("unexpected excluded check targets:\nwant: %v\ngot:  %v", want, targets)
 	}
 }
 

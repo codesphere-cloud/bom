@@ -1,8 +1,12 @@
 name: helm-bom check
 description: Validate generated BOM files against upstream registries inside GitHub Actions.
 inputs:
-  paths:
-    description: Newline-separated BOM file or directory paths for check mode. Glob patterns are supported.
+  include-paths:
+    description: Newline-separated BOM file or directory paths to include for check mode. Glob patterns are supported.
+    required: false
+    default: ""
+  exclude-paths:
+    description: Newline-separated BOM file or directory paths to exclude from check mode. Glob patterns are supported.
     required: false
     default: ""
   changed-only:
@@ -79,7 +83,8 @@ runs:
       name: Run helm-bom check action
       shell: bash
       env:
-        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}
+        INPUT_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_REGISTRY_SERVER: ${{ inputs.registry-server }}
@@ -89,7 +94,8 @@ runs:
       run: |
         "${{ steps.resolve-binary.outputs.binary-path }}" \
           check \
-          --paths="$INPUT_PATHS" \
+          --include-paths="$INPUT_INCLUDE_PATHS" \
+          --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
           --registry-server="$INPUT_REGISTRY_SERVER" \

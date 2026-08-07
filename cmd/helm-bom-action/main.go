@@ -49,6 +49,7 @@ func newGenerateCommand() *cobra.Command {
 	flags.StringVar(&cfg.Namespace, "namespace", cfg.Namespace, "Helm namespace used for generation.")
 	flags.StringVar(&cfg.ReleaseName, "release-name", "", "Helm release name override.")
 	flags.BoolVar(&cfg.ValidateConfiguredImageExist, "validate-configured-image-exists", false, "Fail when configured additional image selectors do not resolve.")
+	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated chart paths to exclude. Glob patterns are supported.")
 	return cmd
 }
 
@@ -70,12 +71,13 @@ func newCheckCommand() *cobra.Command {
 	flags.StringVar(&cfg.RegistryServer, "registry-server", "", "Registry server to log in to before checking images.")
 	flags.StringVar(&cfg.RegistryUsername, "registry-username", "", "Registry username used with registry-server.")
 	flags.StringVar(&cfg.RegistryPassword, "registry-password", "", "Registry password used with registry-server.")
+	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated BOM paths to exclude. Glob patterns are supported.")
 	return cmd
 }
 
 func addBaseFlags(cmd *cobra.Command, cfg *ghaction.BaseConfig) {
 	flags := cmd.Flags()
-	flags.StringVar(&cfg.Paths, "paths", "", "Newline- or comma-separated chart or BOM paths. Glob patterns are supported.")
+	flags.StringVar(&cfg.IncludePaths, "include-paths", "", "Newline- or comma-separated chart or BOM paths to include. Glob patterns are supported.")
 	flags.BoolVar(&cfg.ChangedOnly, "changed-only", false, "Restrict processing to paths touched by the current PR or push.")
 	flags.BoolVar(&cfg.Debug, "debug", false, "Enable debug logging and pass --debug through to helm-bom subcommands.")
 	flags.BoolVar(&cfg.FailOnNoMatches, "fail-on-no-matches", false, "Exit with an error when no paths match the configured filters.")

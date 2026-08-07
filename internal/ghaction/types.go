@@ -12,7 +12,7 @@ import (
 )
 
 type BaseConfig struct {
-	Paths           string
+	IncludePaths    string
 	ChangedOnly     bool
 	Debug           bool
 	FailOnNoMatches bool
@@ -24,6 +24,7 @@ type GenerateConfig struct {
 	Namespace                    string
 	ReleaseName                  string
 	ValidateConfiguredImageExist bool
+	ExcludePaths                 string
 }
 
 type CheckConfig struct {
@@ -31,6 +32,7 @@ type CheckConfig struct {
 	RegistryServer   string
 	RegistryUsername string
 	RegistryPassword string
+	ExcludePaths     string
 }
 
 type Dependencies struct {
@@ -66,12 +68,14 @@ type baseRunner struct {
 
 type generateRunner struct {
 	baseRunner
-	cfg GenerateConfig
+	cfg           GenerateConfig
+	excludedPaths []string
 }
 
 type checkRunner struct {
 	baseRunner
-	cfg CheckConfig
+	cfg           CheckConfig
+	excludedPaths []string
 }
 
 func defaultDependencies() Dependencies {
@@ -117,7 +121,11 @@ func RunGenerateWithDependencies(ctx context.Context, cfg GenerateConfig, stdout
 	if err != nil {
 		return err
 	}
-	return generateRunner{baseRunner: base, cfg: cfg}.run()
+	return generateRunner{
+		baseRunner:    base,
+		cfg:           cfg,
+		excludedPaths: parseList(cfg.ExcludePaths),
+	}.run()
 }
 
 func RunCheck(ctx context.Context, cfg CheckConfig, stdout io.Writer, stderr io.Writer) error {
@@ -129,7 +137,11 @@ func RunCheckWithDependencies(ctx context.Context, cfg CheckConfig, stdout io.Wr
 	if err != nil {
 		return err
 	}
-	return checkRunner{baseRunner: base, cfg: cfg}.run()
+	return checkRunner{
+		baseRunner:    base,
+		cfg:           cfg,
+		excludedPaths: parseList(cfg.ExcludePaths),
+	}.run()
 }
 
 func newBaseRunner(ctx context.Context, cfg BaseConfig, stdout io.Writer, stderr io.Writer, deps Dependencies) (baseRunner, error) {
@@ -144,7 +156,7 @@ func newBaseRunner(ctx context.Context, cfg BaseConfig, stdout io.Writer, stderr
 		stdout:          stdout,
 		repoRoot:        repoRoot,
 		repoRootSource:  repoRootSource,
-		configuredPaths: parseList(cfg.Paths),
+		configuredPaths: parseList(cfg.IncludePaths),
 		logger:          logging.NewWriterLogger(stderr, cfg.Debug),
 	}, nil
 }

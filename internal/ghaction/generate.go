@@ -65,8 +65,10 @@ func (r generateRunner) logStartup() {
 		r.cfg.ReleaseName,
 		r.cfg.FailOnNoMatches,
 	)
-	r.logger.Infof("raw paths input: %q", r.cfg.Paths)
-	logging.LogList(r.logger, "parsed paths input", r.configuredPaths)
+	r.logger.Infof("raw include-paths input: %q", r.cfg.IncludePaths)
+	logging.LogList(r.logger, "parsed include-paths input", r.configuredPaths)
+	r.logger.Infof("raw exclude-paths input: %q", r.cfg.ExcludePaths)
+	logging.LogList(r.logger, "parsed exclude-paths input", r.excludedPaths)
 }
 
 func (r generateRunner) resolveTargets() ([]string, error) {
@@ -96,7 +98,12 @@ func (r generateRunner) resolveTargets() ([]string, error) {
 		}
 	}
 
-	return sortedKeys(targetSet), nil
+	targets := sortedKeys(targetSet)
+	filteredTargets, err := r.excludeTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+	return filteredTargets, nil
 }
 
 func (r generateRunner) runTargets(targets []string) ([]string, []string, []string, error) {
@@ -188,4 +195,40 @@ func filterGenerateTargetsByChangedPaths(targets []string, changedPaths []string
 	}
 
 	return filtered
+}
+
+func (r generateRunner) excludeTargets(targets []string) ([]string, error) {
+	if len(r.excludedPaths) == 0 {
+		return targets, nil
+	}
+
+	excludedSet := map[string]struct{}{}
+	for _, pattern := range r.excludedPaths {
+		matches, err := expandPattern(r.repoRoot, pattern)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, match := range matches {
+			info, err := r.deps.Stat(match)
+			if err != nil {
+				return nil, err
+			}
+
+			target, err := normalizeGenerateTarget(r.repoRoot, match, info)
+			if err != nil {
+				return nil, err
+			}
+			excludedSet[target] = struct{}{}
+		}
+	}
+
+	filtered := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := excludedSet[target]; ok {
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered, nil
 }

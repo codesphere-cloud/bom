@@ -65,7 +65,7 @@ jobs:
       - name: Run Generate Mode Via Local Generate Action
         uses: ./generate
         with:
-          paths: testdata/charts/*
+          include-paths: testdata/charts/*
           changed-only: "false"
 
       - name: Verify Generated BOM
@@ -74,5 +74,5 @@ jobs:
       - name: Run Check Mode Via Local Check Action
         uses: ./check
         with:
-          paths: testdata/charts/*/bom.json
+          include-paths: testdata/charts/*/bom.json
           changed-only: "false"

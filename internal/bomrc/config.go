@@ -12,9 +12,9 @@ import (
 var fileNames = []string{".bomrc.yml", ".bomrc.yaml"}
 
 type Config struct {
-	AdditionalImages []AdditionalImage `json:"additionalImages"`
-	ImageKeyMappings map[string]string `json:"imageKeyMappings,omitempty"`
-	BOMGenerationValues map[string]any `json:"bomGenerationValues,omitempty"`
+	AdditionalImages    []AdditionalImage `json:"additionalImages"`
+	ImageKeyMappings    map[string]string `json:"imageKeyMappings,omitempty"`
+	BOMGenerationValues map[string]any    `json:"bomGenerationValues,omitempty"`
 }
 
 type AdditionalImage struct {
