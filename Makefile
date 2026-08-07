@@ -33,16 +33,16 @@ test: check-tools ## Run all Go tests
 test-e2e: check-tools ## Run only the end-to-end integration test
 	go test ./test/e2e -run TestBOMExtractsImagesFromChart
 
-fmt: ## Format Go code
-	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+fmt:
+	go fmt ./...
 
-fmt-check: ## Check that Go code is formatted
-	test -z "$$(gofmt -l $$(find . -name '*.go' -not -path './vendor/*'))"
-
-lint: ## Run the linter
+lint:
 	go tool golangci-lint run
 
-clean: ## Remove build artifacts
+lint-fix:
+	go tool golangci-lint run --fix
+
+clean:
 	rm -rf bin dist .tmp
 
 generate-license: generate

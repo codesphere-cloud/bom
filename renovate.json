@@ -7,7 +7,7 @@
       "postUpgradeTasks": {
           "commands": [
             "go mod tidy",
-            "make generate-notice",
+            "make generate-notice"
           ]
       }
     }
