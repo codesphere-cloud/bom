@@ -126,7 +126,7 @@ func (r checkRunner) runTargets(targets []string) ([]string, []CheckFailure) {
 	processed := make([]string, 0, len(targets))
 	failures := make([]CheckFailure, 0)
 	for _, target := range targets {
-		r.logger.Debugf("checking BOM %s", target)
+		r.logger.Infof("checking BOM %s", target)
 		processed = append(processed, target)
 		cfg := checkworkflow.Config{
 			BOMPath:   filepath.Join(r.repoRoot, filepath.FromSlash(target)),
@@ -173,7 +173,7 @@ func (e *checkFailuresError) Unwrap() []error {
 }
 
 func (r checkRunner) logMatchedTargets(targets []string) {
-	r.logger.Debugf("found %d BOM file(s) to process", len(targets))
+	r.logger.Infof("found %d BOM file(s) to process", len(targets))
 	logging.LogListDebug(r.logger, "matched BOM targets", targets)
 }
 

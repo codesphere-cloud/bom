@@ -15,6 +15,7 @@ import (
 
 	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
 	generateworkflow "github.com/codesphere-cloud/bom/internal/generate"
+	"github.com/codesphere-cloud/bom/internal/images"
 	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -1008,6 +1009,41 @@ func TestRenderCheckSummaryAsTable(t *testing.T) {
 	}
 	if strings.Contains(summary, "| BOM") || strings.Contains(summary, "status:") {
 		t.Fatalf("stdout table contains another format:\n%s", summary)
+	}
+}
+
+func TestCheckSummariesIncludeImageFailureMetrics(t *testing.T) {
+	result := Result{Failures: []CheckFailure{
+		{
+			Path: "boms/wrong-registry.json",
+			Err: &images.DisallowedRegistriesError{References: []string{
+				"quay.io/example/api:1.0.0",
+				"quay.io/example/worker:1.0.0",
+			}},
+		},
+		{
+			Path: "boms/missing.json",
+			Err: &images.MissingImageError{References: []string{
+				"ghcr.io/example/a:1.0.0",
+				"ghcr.io/example/b:1.0.0",
+				"ghcr.io/example/c:1.0.0",
+			}},
+		},
+	}}
+
+	tableSummary := renderCheckSummaryTable(result)
+	if !strings.Contains(tableSummary, "Images in wrong registry  2") || !strings.Contains(tableSummary, "Images not found          3") {
+		t.Fatalf("table summary missing image metrics:\n%s", tableSummary)
+	}
+
+	yamlSummary := renderCheckSummaryYAML(result)
+	if !strings.Contains(yamlSummary, "wrongRegistryImages: 2") || !strings.Contains(yamlSummary, "missingImages: 3") {
+		t.Fatalf("YAML summary missing image metrics:\n%s", yamlSummary)
+	}
+
+	githubSummary := renderGitHubCheckSummary(result)
+	if !strings.Contains(githubSummary, "Images in wrong registry: 2") || !strings.Contains(githubSummary, "Images not found: 3") {
+		t.Fatalf("GitHub summary missing image metrics:\n%s", githubSummary)
 	}
 }
 

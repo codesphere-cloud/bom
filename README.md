@@ -257,7 +257,7 @@ Check outputs:
 - `processed-boms`
 - `failed-boms`
 
-All selected BOMs are checked even when some fail. The Action exits unsuccessfully after processing every BOM and writes a step-summary table containing each BOM and its validation status or error.
+All selected BOMs are checked even when some fail. The Action exits unsuccessfully after processing every BOM and writes a step-summary table containing each BOM and its validation status or error. Its metrics include the total number of image references outside the allowed registries and the total number that could not be found upstream.
 
 ## Users Of The CLI
 

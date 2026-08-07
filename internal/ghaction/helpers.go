@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/codesphere-cloud/bom/internal/images"
 	"sigs.k8s.io/yaml"
 )
 
@@ -107,6 +108,7 @@ func renderGitHubSummary(mode string, result Result) string {
 }
 
 func renderGitHubCheckSummary(result Result) string {
+	metrics := collectCheckMetrics(result.Failures)
 	lines := []string{
 		"### bom action `check`",
 		"",
@@ -114,6 +116,8 @@ func renderGitHubCheckSummary(result Result) string {
 		fmt.Sprintf("- Matched BOMs: %d", len(result.MatchedPaths)),
 		fmt.Sprintf("- Processed BOMs: %d", len(result.ProcessedPaths)),
 		fmt.Sprintf("- Failed BOMs: %d", len(result.Failures)),
+		fmt.Sprintf("- Images in wrong registry: %d", metrics.WrongRegistryImages),
+		fmt.Sprintf("- Images not found: %d", metrics.MissingImages),
 	}
 	if len(result.ProcessedPaths) > 0 {
 		lines = append(lines, "", "#### Check results", "", renderMarkdownCheckResultsTable(result))
@@ -122,11 +126,13 @@ func renderGitHubCheckSummary(result Result) string {
 }
 
 type yamlCheckSummary struct {
-	ChangedBOMs   int               `json:"changedBoms"`
-	MatchedBOMs   int               `json:"matchedBoms"`
-	ProcessedBOMs int               `json:"processedBoms"`
-	FailedBOMs    int               `json:"failedBoms"`
-	Results       []yamlCheckResult `json:"results,omitempty"`
+	ChangedBOMs         int               `json:"changedBoms"`
+	MatchedBOMs         int               `json:"matchedBoms"`
+	ProcessedBOMs       int               `json:"processedBoms"`
+	FailedBOMs          int               `json:"failedBoms"`
+	WrongRegistryImages int               `json:"wrongRegistryImages"`
+	MissingImages       int               `json:"missingImages"`
+	Results             []yamlCheckResult `json:"results,omitempty"`
 }
 
 type yamlCheckResult struct {
@@ -136,17 +142,20 @@ type yamlCheckResult struct {
 }
 
 func renderCheckSummaryYAML(result Result) string {
+	metrics := collectCheckMetrics(result.Failures)
 	failuresByPath := make(map[string]error, len(result.Failures))
 	for _, failure := range result.Failures {
 		failuresByPath[failure.Path] = failure.Err
 	}
 
 	summary := yamlCheckSummary{
-		ChangedBOMs:   len(result.ChangedPaths),
-		MatchedBOMs:   len(result.MatchedPaths),
-		ProcessedBOMs: len(result.ProcessedPaths),
-		FailedBOMs:    len(result.Failures),
-		Results:       make([]yamlCheckResult, 0, len(result.ProcessedPaths)),
+		ChangedBOMs:         len(result.ChangedPaths),
+		MatchedBOMs:         len(result.MatchedPaths),
+		ProcessedBOMs:       len(result.ProcessedPaths),
+		FailedBOMs:          len(result.Failures),
+		WrongRegistryImages: metrics.WrongRegistryImages,
+		MissingImages:       metrics.MissingImages,
+		Results:             make([]yamlCheckResult, 0, len(result.ProcessedPaths)),
 	}
 	for _, path := range result.ProcessedPaths {
 		checkResult := yamlCheckResult{BOM: path, Status: "passed"}
@@ -172,6 +181,7 @@ func renderCheckOutputSummary(result Result) string {
 }
 
 func renderCheckSummaryTable(result Result) string {
+	metrics := collectCheckMetrics(result.Failures)
 	failuresByPath := make(map[string]error, len(result.Failures))
 	for _, failure := range result.Failures {
 		failuresByPath[failure.Path] = failure.Err
@@ -184,6 +194,8 @@ func renderCheckSummaryTable(result Result) string {
 	_, _ = fmt.Fprintf(table, "Matched BOMs\t%d\n", len(result.MatchedPaths))
 	_, _ = fmt.Fprintf(table, "Processed BOMs\t%d\n", len(result.ProcessedPaths))
 	_, _ = fmt.Fprintf(table, "Failed BOMs\t%d\n", len(result.Failures))
+	_, _ = fmt.Fprintf(table, "Images in wrong registry\t%d\n", metrics.WrongRegistryImages)
+	_, _ = fmt.Fprintf(table, "Images not found\t%d\n", metrics.MissingImages)
 	_, _ = fmt.Fprintln(table)
 	_, _ = fmt.Fprintln(table, "BOM\tSTATUS\tERROR")
 	for _, path := range result.ProcessedPaths {
@@ -197,6 +209,27 @@ func renderCheckSummaryTable(result Result) string {
 	}
 	_ = table.Flush()
 	return builder.String()
+}
+
+type checkMetrics struct {
+	WrongRegistryImages int
+	MissingImages       int
+}
+
+func collectCheckMetrics(failures []CheckFailure) checkMetrics {
+	var metrics checkMetrics
+	for _, failure := range failures {
+		var disallowed *images.DisallowedRegistriesError
+		if errors.As(failure.Err, &disallowed) {
+			metrics.WrongRegistryImages += len(disallowed.References)
+		}
+
+		var missing *images.MissingImageError
+		if errors.As(failure.Err, &missing) {
+			metrics.MissingImages += len(missing.References)
+		}
+	}
+	return metrics
 }
 
 func renderMarkdownCheckResultsTable(result Result) string {
