@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/codesphere-cloud/bom/internal/ghaction"
+	"github.com/codesphere-cloud/bom/internal/sbom"
 	"github.com/spf13/cobra"
 )
 
@@ -58,6 +59,7 @@ func newGenerateCommand() *cobra.Command {
 func newCheckCommand() *cobra.Command {
 	cfg := ghaction.CheckConfig{
 		BaseConfig:    ghaction.BaseConfig{},
+		BOMFormat:     sbom.DefaultInputFormat,
 		SummaryFormat: "table",
 	}
 
@@ -72,6 +74,7 @@ func newCheckCommand() *cobra.Command {
 	addBaseFlags(cmd, &cfg.BaseConfig)
 	flags := cmd.Flags()
 	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated BOM paths to exclude. Glob patterns are supported.")
+	flags.StringVar(&cfg.BOMFormat, "bom-format", cfg.BOMFormat, "Input BOM format.")
 	flags.StringVar(&cfg.SummaryFormat, "format", cfg.SummaryFormat, "Check summary format: table or yaml.")
 	return cmd
 }

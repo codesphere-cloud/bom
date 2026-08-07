@@ -12,7 +12,7 @@ components:
     containerImages:
       ghcr.io/example/api: ghcr.io/example/api:1.2.3
       quay.io/example/worker: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-`))
+`), "csbom-yaml")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -42,7 +42,7 @@ containerImages:
       - Deployment/api spec.containers[0]
   quay.io/example/worker:
     ref: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-`))
+`), "csbom-v2-yaml")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestParseCSBOMV2WithoutOCIReferences(t *testing.T) {
 	document, err := Parse(strings.NewReader(`
 version: "2"
 name: empty-chart
-`))
+`), "csbom-v2")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -87,9 +87,28 @@ func TestParseDoesNotTreatArbitraryYAMLAsEmptyCSBOMV2(t *testing.T) {
 replicaCount: 2
 image:
   repository: ghcr.io/example/api
-`))
+`), "csbom-v2")
 	if err == nil {
 		t.Fatal("expected unsupported YAML to fail")
+	}
+}
+
+func TestParseUsesOnlyConfiguredFormat(t *testing.T) {
+	_, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+`), "csbom-v2")
+	if err == nil {
+		t.Fatal("expected csbom input parsed as csbom-v2 to fail")
+	}
+}
+
+func TestParseRejectsUnsupportedFormat(t *testing.T) {
+	_, err := Parse(strings.NewReader("{}"), "auto")
+	if err == nil || !strings.Contains(err.Error(), `unsupported bom format "auto"`) {
+		t.Fatalf("expected unsupported format error, got %v", err)
 	}
 }
 
@@ -106,7 +125,7 @@ func TestParseCSBOMV2JSON(t *testing.T) {
       "ref": "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   }
-}`))
+}`), "csbom-v2-json")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -137,8 +156,8 @@ components:
       ghcr.io/example/api: ghcr.io/example/api:1.2.3
     files:
       dependency:
-        ociRef: registry.example.com/charts/dependency:2.0.0
-`))
+        ociRef: oci://registry.example.com/charts/dependency:2.0.0
+`), "csbom")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -150,6 +169,9 @@ components:
 	if document.Components[1].Type != ComponentTypeHelmChart {
 		t.Fatalf("expected Helm chart component, got %#v", document.Components[1])
 	}
+	if document.Components[1].Reference != "registry.example.com/charts/dependency:2.0.0" {
+		t.Fatalf("unexpected Helm chart reference: %q", document.Components[1].Reference)
+	}
 }
 
 func TestParseCSBOMV2IncludesHelmChartOCIRefs(t *testing.T) {
@@ -158,11 +180,11 @@ version: "2"
 name: chart
 helmCharts:
   dependency:
-    ref: registry.example.com/charts/dependency:2.0.0
+    ref: oci://registry.example.com/charts/dependency:2.0.0
 containerImages:
   ghcr.io/example/api:
     ref: ghcr.io/example/api:1.2.3
-`))
+`), "csbom-v2")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -173,6 +195,46 @@ containerImages:
 	}
 	if len(ImageRefs(document)) != 1 {
 		t.Fatalf("expected only the container image from ImageRefs, got %#v", ImageRefs(document))
+	}
+	if document.Components[1].Reference != "registry.example.com/charts/dependency:2.0.0" {
+		t.Fatalf("unexpected Helm chart reference: %q", document.Components[1].Reference)
+	}
+}
+
+func TestParseCSBOMSkipsHelmChartRefsWithoutOCIScheme(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+    files:
+      dependency:
+        ociRef: registry.example.com/charts/dependency:2.0.0
+`), "csbom")
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if len(document.Components) != 1 || document.Components[0].Type != ComponentTypeOCIImage {
+		t.Fatalf("expected only the container image, got %#v", document.Components)
+	}
+}
+
+func TestParseCSBOMV2SkipsHelmChartRefsWithoutOCIScheme(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+version: "2"
+name: chart
+helmCharts:
+  dependency:
+    ref: registry.example.com/charts/dependency:2.0.0
+containerImages:
+  ghcr.io/example/api:
+    ref: ghcr.io/example/api:1.2.3
+`), "csbom-v2")
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if len(document.Components) != 1 || document.Components[0].Type != ComponentTypeOCIImage {
+		t.Fatalf("expected only the container image, got %#v", document.Components)
 	}
 }
 
@@ -205,7 +267,7 @@ func TestParseSPDXJSON(t *testing.T) {
       "summary": "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   ]
-}`))
+}`), "spdx-json")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}

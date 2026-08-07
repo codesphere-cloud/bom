@@ -244,6 +244,7 @@ Check-specific inputs:
 - `exclude-paths`: newline-separated BOM selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only validate BOM files that were changed in the current push or pull request
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
+- `bom-format`: format used to parse every selected BOM. Default: `csbom-v2`. Supported values are `spdx-json`, `csbom`, `csbom-json`, `csbom-yaml`, `csbom-v2`, `csbom-v2-json`, and `csbom-v2-yaml`. The Action does not infer the format from file contents or extensions.
 - `format`: stdout check-summary format, either `table` (default) or `yaml`; the GitHub step summary always uses a Markdown table
 - `fail-on-no-matches`: fail instead of succeeding when no BOM paths remain after filtering
 
@@ -276,7 +277,7 @@ Explicit subcommands:
 
 ```bash
 go run ./cmd/bom generate ./chart --output bom.json
-go run ./cmd/bom check bom.json
+go run ./cmd/bom check bom.json --format csbom-v2
 printf '%s\n' "$TOKEN" | go run ./cmd/bom registry login ghcr.io -u "$USER" --password-stdin
 ```
 
@@ -317,7 +318,7 @@ The default CLI output format is `spdx-json`.
 go run ./cmd/bom check bom.json
 ```
 
-Supported input BOM formats for `check`:
+The `check` command parses the BOM only as the format selected with `--format` (default: `csbom-v2`); it does not infer the format from the file contents or extension. Supported input BOM formats:
 
 - `spdx-json`
 - `csbom-json`

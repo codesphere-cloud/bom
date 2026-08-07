@@ -11,7 +11,8 @@ import (
 )
 
 type Config struct {
-	BOMPath string
+	BOMPath   string
+	BOMFormat string
 }
 
 type Validator func([]images.ImageRef) error
@@ -21,6 +22,10 @@ func Run(logger logging.Logger, cfg Config) error {
 }
 
 func RunWithValidator(logger logging.Logger, cfg Config, validator Validator) error {
+	if cfg.BOMFormat == "" {
+		cfg.BOMFormat = sbom.DefaultInputFormat
+	}
+
 	lintConfig, configRoot, foundConfig, err := bomlint.Find(cfg.BOMPath)
 	if err != nil {
 		return err
@@ -37,7 +42,7 @@ func RunWithValidator(logger logging.Logger, cfg Config, validator Validator) er
 		_ = file.Close()
 	}()
 
-	document, err := sbom.Parse(file)
+	document, err := sbom.Parse(file, cfg.BOMFormat)
 	if err != nil {
 		return err
 	}

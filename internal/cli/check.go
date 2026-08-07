@@ -2,6 +2,7 @@ package cli
 
 import (
 	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
+	"github.com/codesphere-cloud/bom/internal/sbom"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +12,7 @@ type checkConfig struct {
 }
 
 func (c *CLI) newCheckCommand() *cobra.Command {
-	cfg := checkConfig{}
+	cfg := checkConfig{Config: checkworkflow.Config{BOMFormat: sbom.DefaultInputFormat}}
 	cmd := &cobra.Command{
 		Use:   "check <bom>",
 		Short: "Validate that every image in a BOM exists in its upstream registry",
@@ -23,5 +24,6 @@ func (c *CLI) newCheckCommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&cfg.debug, "debug", false, "Enable debug logging.")
+	cmd.Flags().StringVar(&cfg.BOMFormat, "format", cfg.BOMFormat, "Input BOM format.")
 	return cmd
 }

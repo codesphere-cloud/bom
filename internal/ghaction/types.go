@@ -33,6 +33,7 @@ type GenerateConfig struct {
 type CheckConfig struct {
 	BaseConfig
 	ExcludePaths  string
+	BOMFormat     string
 	SummaryFormat string
 }
 

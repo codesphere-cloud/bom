@@ -21,6 +21,10 @@ inputs:
     description: Enable debug logging and pass --debug through to bom check.
     required: false
     default: "false"
+  bom-format:
+    description: Input BOM format. Supported values are spdx-json, csbom, csbom-json, csbom-yaml, csbom-v2, csbom-v2-json, and csbom-v2-yaml.
+    required: false
+    default: csbom-v2
   format:
     description: Check summary format. Supported values are table and yaml.
     required: false
@@ -86,6 +90,7 @@ runs:
         INPUT_EXCLUDE_PATHS: ${{ inputs['exclude-paths'] }}
         INPUT_CHANGED_ONLY: ${{ inputs['changed-only'] }}
         INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_BOM_FORMAT: ${{ inputs['bom-format'] }}
         INPUT_SUMMARY_FORMAT: ${{ inputs.format }}
         INPUT_FAIL_ON_NO_MATCHES: ${{ inputs['fail-on-no-matches'] }}
       run: |
@@ -95,5 +100,6 @@ runs:
           --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
+          --bom-format="$INPUT_BOM_FORMAT" \
           --format="$INPUT_SUMMARY_FORMAT" \
           --fail-on-no-matches="$INPUT_FAIL_ON_NO_MATCHES"

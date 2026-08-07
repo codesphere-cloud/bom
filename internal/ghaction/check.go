@@ -9,9 +9,13 @@ import (
 
 	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
 	"github.com/codesphere-cloud/bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/sbom"
 )
 
 func (r checkRunner) run() error {
+	if strings.TrimSpace(r.cfg.BOMFormat) == "" {
+		r.cfg.BOMFormat = sbom.DefaultInputFormat
+	}
 	summaryFormat, err := normalizeCheckSummaryFormat(r.cfg.SummaryFormat)
 	if err != nil {
 		return err
@@ -74,6 +78,7 @@ func (r checkRunner) logStartup() {
 		logging.TableRow{Label: "repository root", Value: r.repoRoot},
 		logging.TableRow{Label: "changed only", Value: strconv.FormatBool(r.cfg.ChangedOnly)},
 		logging.TableRow{Label: "fail on no matches", Value: strconv.FormatBool(r.cfg.FailOnNoMatches)},
+		logging.TableRow{Label: "BOM format", Value: r.cfg.BOMFormat},
 		logging.TableRow{Label: "summary format", Value: r.cfg.SummaryFormat},
 		logging.TableRow{Label: "include paths (raw)", Value: strconv.Quote(r.cfg.IncludePaths)},
 		logging.TableRow{Label: "include paths (parsed)", Value: logging.FormatList(r.configuredPaths)},
@@ -124,7 +129,8 @@ func (r checkRunner) runTargets(targets []string) ([]string, []CheckFailure) {
 		r.logger.Debugf("checking BOM %s", target)
 		processed = append(processed, target)
 		cfg := checkworkflow.Config{
-			BOMPath: filepath.Join(r.repoRoot, filepath.FromSlash(target)),
+			BOMPath:   filepath.Join(r.repoRoot, filepath.FromSlash(target)),
+			BOMFormat: r.cfg.BOMFormat,
 		}
 		if err := r.deps.CheckBOM(r.logger, cfg); err != nil {
 			r.logger.Debugf("BOM %s failed validation: %v", target, err)

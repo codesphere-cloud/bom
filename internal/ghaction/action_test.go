@@ -712,6 +712,7 @@ allowedRegistries:
 	}
 
 	var checked []string
+	var checkedFormat string
 	err := RunCheckWithDependencies(context.Background(), CheckConfig{
 		BaseConfig: BaseConfig{IncludePaths: "boms"},
 	}, io.Discard, io.Discard, Dependencies{
@@ -721,6 +722,7 @@ allowedRegistries:
 		WalkDir:   filepath.WalkDir,
 		CheckBOM: func(_ logging.Logger, cfg checkworkflow.Config) error {
 			checked = append(checked, filepath.ToSlash(cfg.BOMPath))
+			checkedFormat = cfg.BOMFormat
 			return nil
 		},
 		WriteOutput:  func(string, string) error { return nil },
@@ -731,6 +733,9 @@ allowedRegistries:
 	}
 	if len(checked) != 1 || !strings.HasSuffix(checked[0], "/boms/api.json") {
 		t.Fatalf("unexpected checked BOMs: %#v", checked)
+	}
+	if checkedFormat != "csbom-v2" {
+		t.Fatalf("expected default BOM format csbom-v2, got %q", checkedFormat)
 	}
 }
 
@@ -754,12 +759,16 @@ func TestRunCheckCollectsAllBOMFailuresAndWritesSummary(t *testing.T) {
 	outputs := map[string]string{}
 	err := RunCheckWithDependencies(context.Background(), CheckConfig{
 		BaseConfig: BaseConfig{IncludePaths: "boms"},
+		BOMFormat:  "spdx-json",
 	}, io.Discard, io.Discard, Dependencies{
 		Getwd:     func() (string, error) { return repoRoot, nil },
 		LookupEnv: func(string) (string, bool) { return "", false },
 		Stat:      os.Stat,
 		WalkDir:   filepath.WalkDir,
 		CheckBOM: func(_ logging.Logger, cfg checkworkflow.Config) error {
+			if cfg.BOMFormat != "spdx-json" {
+				t.Fatalf("expected configured BOM format spdx-json, got %q", cfg.BOMFormat)
+			}
 			target := filepath.ToSlash(cfg.BOMPath)
 			checked = append(checked, target)
 			if strings.Contains(target, "fail-") {

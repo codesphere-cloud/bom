@@ -17,7 +17,7 @@ type FileRef struct {
 	SrcUrl     string   `json:"srcUrl,omitempty"`
 	Executable bool     `json:"executable,omitempty"`
 	Glob       *GlobRef `json:"glob,omitempty"`
-	// OciRef is an OCI image reference for a Helm chart, e.g. ghcr.io/org/charts/my-chart:1.0.0
+	// OciRef is an OCI reference for a Helm chart, e.g. oci://ghcr.io/org/charts/my-chart:1.0.0
 	OciRef string `json:"ociRef,omitempty"`
 }
 

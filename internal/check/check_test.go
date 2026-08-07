@@ -24,7 +24,7 @@ components:
 	}
 
 	calls := make([]string, 0, 2)
-	if err := RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path}, func(refs []images.ImageRef) error {
+	if err := RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path, BOMFormat: "csbom"}, func(refs []images.ImageRef) error {
 		for _, ref := range refs {
 			calls = append(calls, ref.Reference)
 		}
@@ -53,7 +53,7 @@ version: "2"
 name: chart
 helmCharts:
   dependency:
-    ref: registry.example.com/charts/dependency:2.0.0
+    ref: oci://registry.example.com/charts/dependency:2.0.0
 containerImages:
   api:
     ref: ghcr.io/example/api:1.2.3
@@ -95,7 +95,7 @@ version: "2"
 name: chart
 helmCharts:
   dependency:
-    ref: ghcr.io/example/charts/dependency:2.0.0
+    ref: oci://ghcr.io/example/charts/dependency:2.0.0
 containerImages:
   api:
     ref: ghcr.io/example/api:1.2.3

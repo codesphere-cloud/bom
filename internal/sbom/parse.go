@@ -14,25 +14,24 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func Parse(r io.Reader) (Document, error) {
+const DefaultInputFormat = "csbom-v2"
+
+func Parse(r io.Reader, format string) (Document, error) {
 	content, err := io.ReadAll(r)
 	if err != nil {
 		return Document{}, fmt.Errorf("read bom: %w", err)
 	}
 
-	if document, parseErr := parseSPDXJSON(content); parseErr == nil {
-		return document, nil
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "spdx", "spdx-json":
+		return parseSPDXJSON(content)
+	case "csbom", "csbom-json", "csbom-yaml":
+		return parseCSBOM(content)
+	case "csbom-v2", "csbom-v2-json", "csbom-v2-yaml":
+		return parseCSBOMV2(content)
+	default:
+		return Document{}, fmt.Errorf("unsupported bom format %q", format)
 	}
-
-	if document, parseErr := parseCSBOM(content); parseErr == nil {
-		return document, nil
-	}
-
-	if document, parseErr := parseCSBOMV2(content); parseErr == nil {
-		return document, nil
-	}
-
-	return Document{}, fmt.Errorf("unsupported bom format")
 }
 
 func ImageRefs(document Document) []images.ImageRef {
@@ -142,10 +141,11 @@ func parseCSBOM(content []byte) (Document, error) {
 		}
 
 		for _, file := range componentConfig.Files {
-			if strings.TrimSpace(file.OciRef) == "" {
+			chartReference, isOCI := helmChartOCIReference(file.OciRef)
+			if !isOCI {
 				continue
 			}
-			ref, ok := images.ParseImageRef(file.OciRef)
+			ref, ok := images.ParseImageRef(chartReference)
 			if !ok {
 				return Document{}, fmt.Errorf("invalid Helm chart OCI reference %q in csbom", file.OciRef)
 			}
@@ -197,7 +197,11 @@ func parseCSBOMV2(content []byte) (Document, error) {
 		})
 	}
 	for repository, chart := range payload.HelmCharts {
-		ref, ok := images.ParseImageRef(chart.Ref)
+		chartReference, isOCI := helmChartOCIReference(chart.Ref)
+		if !isOCI {
+			continue
+		}
+		ref, ok := images.ParseImageRef(chartReference)
 		if !ok {
 			return Document{}, fmt.Errorf("invalid Helm chart OCI reference %q in csbom v2", chart.Ref)
 		}
@@ -207,7 +211,7 @@ func parseCSBOMV2(content []byte) (Document, error) {
 			Reference:  ref.Reference,
 			Tag:        ref.Tag,
 			Digest:     ref.Digest,
-			Evidence:   chart.Sources,
+			Evidence:   []string{},
 		})
 	}
 
@@ -216,4 +220,12 @@ func parseCSBOMV2(content []byte) (Document, error) {
 	})
 
 	return Document{Components: components}, nil
+}
+
+func helmChartOCIReference(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "oci://") {
+		return "", false
+	}
+	return strings.TrimPrefix(value, "oci://"), true
 }
