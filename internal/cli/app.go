@@ -209,7 +209,7 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	}
 
 	valuesFiles := append([]string(nil), cfg.valuesFiles...)
-	cleanup, err := prependDummyValuesFile(&valuesFiles, bomConfig.DummyValues)
+	cleanup, err := prependBOMGenerationValuesFile(&valuesFiles, bomConfig.BOMGenerationValues)
 	if err != nil {
 		return err
 	}
@@ -285,30 +285,30 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	return formatter.Format(stdout, document)
 }
 
-func prependDummyValuesFile(valuesFiles *[]string, dummyValues map[string]any) (func(), error) {
-	if len(dummyValues) == 0 {
+func prependBOMGenerationValuesFile(valuesFiles *[]string, bomGenerationValues map[string]any) (func(), error) {
+	if len(bomGenerationValues) == 0 {
 		return nil, nil
 	}
 
-	content, err := yaml.Marshal(dummyValues)
+	content, err := yaml.Marshal(bomGenerationValues)
 	if err != nil {
-		return nil, fmt.Errorf("marshal .bomrc dummyValues: %w", err)
+		return nil, fmt.Errorf("marshal .bomrc bomGenerationValues: %w", err)
 	}
 
-	file, err := os.CreateTemp("", "helm-bom-dummy-values-*.yaml")
+	file, err := os.CreateTemp("", "helm-bom-generation-values-*.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("create dummy values file: %w", err)
+		return nil, fmt.Errorf("create bom generation values file: %w", err)
 	}
 
 	if _, err := file.Write(content); err != nil {
 		_ = file.Close()
 		_ = os.Remove(file.Name())
-		return nil, fmt.Errorf("write dummy values file: %w", err)
+		return nil, fmt.Errorf("write bom generation values file: %w", err)
 	}
 
 	if err := file.Close(); err != nil {
 		_ = os.Remove(file.Name())
-		return nil, fmt.Errorf("close dummy values file: %w", err)
+		return nil, fmt.Errorf("close bom generation values file: %w", err)
 	}
 
 	*valuesFiles = append([]string{file.Name()}, *valuesFiles...)

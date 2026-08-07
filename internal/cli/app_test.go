@@ -106,16 +106,16 @@ func TestRunRegistryLoginReadsPasswordFromStdin(t *testing.T) {
 	}
 }
 
-func TestPrependDummyValuesFile(t *testing.T) {
+func TestPrependBOMGenerationValuesFile(t *testing.T) {
 	valuesFiles := []string{"values.yaml"}
-	cleanup, err := prependDummyValuesFile(&valuesFiles, map[string]any{
+	cleanup, err := prependBOMGenerationValuesFile(&valuesFiles, map[string]any{
 		"image": map[string]any{
 			"repository": "ghcr.io/example/api",
 			"tag":        "latest",
 		},
 	})
 	if err != nil {
-		t.Fatalf("prependDummyValuesFile returned error: %v", err)
+		t.Fatalf("prependBOMGenerationValuesFile returned error: %v", err)
 	}
 	if cleanup == nil {
 		t.Fatal("expected cleanup function")
@@ -130,12 +130,12 @@ func TestPrependDummyValuesFile(t *testing.T) {
 
 	content, err := os.ReadFile(valuesFiles[0])
 	if err != nil {
-		t.Fatalf("read dummy values file: %v", err)
+		t.Fatalf("read bom generation values file: %v", err)
 	}
 
 	var payload map[string]any
 	if err := yaml.Unmarshal(content, &payload); err != nil {
-		t.Fatalf("unmarshal dummy values file: %v", err)
+		t.Fatalf("unmarshal bom generation values file: %v", err)
 	}
 
 	imageValues, ok := payload["image"].(map[string]any)
@@ -152,6 +152,6 @@ func TestPrependDummyValuesFile(t *testing.T) {
 	path := valuesFiles[0]
 	cleanup()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("expected dummy values file to be removed, stat err=%v", err)
+		t.Fatalf("expected bom generation values file to be removed, stat err=%v", err)
 	}
 }

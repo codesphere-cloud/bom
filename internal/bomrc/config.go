@@ -14,7 +14,7 @@ var fileNames = []string{".bomrc.yml", ".bomrc.yaml"}
 type Config struct {
 	AdditionalImages []AdditionalImage `json:"additionalImages"`
 	ImageKeyMappings map[string]string `json:"imageKeyMappings,omitempty"`
-	DummyValues      map[string]any    `json:"dummyValues,omitempty"`
+	BOMGenerationValues map[string]any `json:"bomGenerationValues,omitempty"`
 }
 
 type AdditionalImage struct {

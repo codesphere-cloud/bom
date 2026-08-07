@@ -28,7 +28,7 @@ additionalImages:
     image: .data.sidecar
 imageKeyMappings:
   ghcr.io/example/api: api
-dummyValues:
+bomGenerationValues:
   image:
     repository: ghcr.io/example/api
     tag: latest
@@ -60,9 +60,9 @@ dummyValues:
 		t.Fatalf("unexpected image key mapping: %#v", cfg.ImageKeyMappings)
 	}
 
-	imageValues, ok := cfg.DummyValues["image"].(map[string]any)
+	imageValues, ok := cfg.BOMGenerationValues["image"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected nested image dummy values, got %#v", cfg.DummyValues["image"])
+		t.Fatalf("expected nested image generation values, got %#v", cfg.BOMGenerationValues["image"])
 	}
 	if imageValues["repository"] != "ghcr.io/example/api" {
 		t.Fatalf("unexpected dummy repository: %#v", imageValues["repository"])
@@ -99,11 +99,11 @@ additionalImages:
 func TestLoadPrefersYMLWhenBothFilesExist(t *testing.T) {
 	chartPath := t.TempDir()
 	ymlContent := []byte(`
-dummyValues:
+bomGenerationValues:
   marker: yml
 `)
 	yamlContent := []byte(`
-dummyValues:
+bomGenerationValues:
   marker: yaml
 `)
 	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), ymlContent, 0o644); err != nil {
@@ -118,7 +118,7 @@ dummyValues:
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	if cfg.DummyValues["marker"] != "yml" {
-		t.Fatalf("expected .bomrc.yml to win, got %#v", cfg.DummyValues["marker"])
+	if cfg.BOMGenerationValues["marker"] != "yml" {
+		t.Fatalf("expected .bomrc.yml to win, got %#v", cfg.BOMGenerationValues["marker"])
 	}
 }
