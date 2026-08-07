@@ -2,6 +2,8 @@ package ghaction
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -234,11 +236,86 @@ func TestBuildGenerateOutputPath(t *testing.T) {
 	}
 }
 
+func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
+	repoRoot := t.TempDir()
+	chartDir := filepath.Join(repoRoot, "charts", "api")
+	if err := os.MkdirAll(chartDir, 0o755); err != nil {
+		t.Fatalf("mkdir chart dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("name: api\n"), 0o600); err != nil {
+		t.Fatalf("write chart file: %v", err)
+	}
+	outputPath := filepath.Join(chartDir, "bom.yaml")
+	if err := os.WriteFile(outputPath, []byte("before\n"), 0o600); err != nil {
+		t.Fatalf("write existing output: %v", err)
+	}
+
+	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
+	runCLI := func(args []string, stdout io.Writer, stderr io.Writer) error {
+		if len(args) == 0 {
+			return fmt.Errorf("missing args")
+		}
+		return os.WriteFile(outputPath, []byte("after\n"), 0o600)
+	}
+
+	processed, changedOutputs, changedTargets, err := runGenerateTargets(repoRoot, []string{"charts/api"}, cfg, io.Discard, io.Discard, runCLI)
+	if err != nil {
+		t.Fatalf("runGenerateTargets returned error: %v", err)
+	}
+
+	if !slices.Equal(processed, []string{"charts/api/bom.yaml"}) {
+		t.Fatalf("unexpected processed paths: %v", processed)
+	}
+	if !slices.Equal(changedOutputs, []string{"charts/api/bom.yaml"}) {
+		t.Fatalf("unexpected changed outputs: %v", changedOutputs)
+	}
+	if !slices.Equal(changedTargets, []string{"charts/api"}) {
+		t.Fatalf("unexpected changed targets: %v", changedTargets)
+	}
+}
+
+func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
+	repoRoot := t.TempDir()
+	chartDir := filepath.Join(repoRoot, "charts", "api")
+	if err := os.MkdirAll(chartDir, 0o755); err != nil {
+		t.Fatalf("mkdir chart dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("name: api\n"), 0o600); err != nil {
+		t.Fatalf("write chart file: %v", err)
+	}
+	outputPath := filepath.Join(chartDir, "bom.yaml")
+	if err := os.WriteFile(outputPath, []byte("stable\n"), 0o600); err != nil {
+		t.Fatalf("write existing output: %v", err)
+	}
+
+	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
+	runCLI := func(args []string, stdout io.Writer, stderr io.Writer) error {
+		return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
+	}
+
+	processed, changedOutputs, changedTargets, err := runGenerateTargets(repoRoot, []string{"charts/api"}, cfg, io.Discard, io.Discard, runCLI)
+	if err != nil {
+		t.Fatalf("runGenerateTargets returned error: %v", err)
+	}
+
+	if !slices.Equal(processed, []string{"charts/api/bom.yaml"}) {
+		t.Fatalf("unexpected processed paths: %v", processed)
+	}
+	if len(changedOutputs) != 0 {
+		t.Fatalf("expected no changed outputs, got %v", changedOutputs)
+	}
+	if len(changedTargets) != 0 {
+		t.Fatalf("expected no changed targets, got %v", changedTargets)
+	}
+}
+
 func TestRenderSummary(t *testing.T) {
 	summary := renderSummary("generate", Result{
-		ChangedPaths:   []string{"charts/api/values.yaml"},
-		MatchedPaths:   []string{"charts/api"},
-		ProcessedPaths: []string{"charts/api/bom.json"},
+		ChangedPaths:        []string{"charts/api/values.yaml"},
+		MatchedPaths:        []string{"charts/api"},
+		ProcessedPaths:      []string{"charts/api/bom.json"},
+		ChangedOutputPaths:  []string{"charts/api/bom.json"},
+		AnyProcessedChanged: true,
 	})
 
 	for _, fragment := range []string{
@@ -246,6 +323,8 @@ func TestRenderSummary(t *testing.T) {
 		"Changed paths: 1",
 		"Matched paths: 1",
 		"Processed paths: 1",
+		"Changed generated outputs: 1",
+		"Any processed output changed: true",
 	} {
 		if !strings.Contains(summary, fragment) {
 			t.Fatalf("summary missing %q:\n%s", fragment, summary)

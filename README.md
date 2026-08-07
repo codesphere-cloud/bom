@@ -245,11 +245,14 @@ jobs:
 
 When `changed-only: true` is set in `check` mode, the Action only validates BOM files that were themselves changed by the current push or pull request. If `paths` is omitted, the Action discovers BOM files from the repository root automatically.
 
-The Action writes three outputs:
+The Action writes these outputs:
 
 - `changed-paths`
 - `matched-paths`
 - `processed-paths`
+- `changed-output-paths`
+- `changed-target-paths`
+- `any-processed-changed`
 
 ## Image Release Flow
 

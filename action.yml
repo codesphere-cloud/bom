@@ -55,6 +55,12 @@ outputs:
     description: Newline-separated chart or BOM paths selected after filtering.
   processed-paths:
     description: Newline-separated generated BOM files or checked BOM paths.
+  changed-output-paths:
+    description: Newline-separated generated BOM paths whose contents changed during this run.
+  changed-target-paths:
+    description: Newline-separated chart paths whose generated BOM contents changed during this run.
+  any-processed-changed:
+    description: Whether any generated BOM output changed during this run.
 runs:
   using: docker
   image: docker://ghcr.io/codesphere-cloud/helm-bom@sha256:f36b2b459bab8d99367ff11310202db14eefedd979a71767d4c443313f99f0d0

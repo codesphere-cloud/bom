@@ -138,9 +138,12 @@ func changedPathsBetweenCommits(ctx context.Context, repoRoot string, baseSHA st
 }
 
 type Result struct {
-	ChangedPaths   []string
-	MatchedPaths   []string
-	ProcessedPaths []string
+	ChangedPaths         []string
+	MatchedPaths         []string
+	ProcessedPaths       []string
+	ChangedOutputPaths   []string
+	ChangedTargetPaths   []string
+	AnyProcessedChanged  bool
 }
 
 func Run(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer) error {
@@ -214,7 +217,7 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 
 	switch cfg.Mode {
 	case "generate":
-		result.ProcessedPaths, err = runGenerateTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
+		result.ProcessedPaths, result.ChangedOutputPaths, result.ChangedTargetPaths, err = runGenerateTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
 	case "check":
 		result.ProcessedPaths, err = runCheckTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
 	default:
@@ -223,6 +226,7 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 	if err != nil {
 		return err
 	}
+	result.AnyProcessedChanged = len(result.ChangedOutputPaths) > 0
 
 	if err := writeOutputs(result, deps.WriteOutput); err != nil {
 		return err
@@ -514,8 +518,10 @@ func filterCheckTargetsByChangedPaths(targets []string, changedPaths []string) [
 	return filtered
 }
 
-func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
+func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, []string, []string, error) {
 	processed := make([]string, 0, len(targets))
+	changedOutputs := make([]string, 0, len(targets))
+	changedTargets := make([]string, 0, len(targets))
 	for _, target := range targets {
 		logf(stderr, "generating BOM for chart %s", target)
 		relativeOutputPath := buildGenerateOutputPath(target, cfg.Format)
@@ -523,8 +529,14 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 		if !filepath.IsAbs(outputPath) {
 			outputPath = filepath.Join(repoRoot, filepath.FromSlash(relativeOutputPath))
 		}
+
+		before, existedBefore, err := readFileIfExists(outputPath)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("read existing output for %s: %w", target, err)
+		}
+
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-			return nil, fmt.Errorf("create output directory for %s: %w", target, err)
+			return nil, nil, nil, fmt.Errorf("create output directory for %s: %w", target, err)
 		}
 
 		args := []string{"generate", filepath.Join(repoRoot, filepath.FromSlash(target)), "--format", cfg.Format, "--output", outputPath}
@@ -542,13 +554,26 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 		}
 
 		if err := runCLI(args, stdout, stderr); err != nil {
-			return nil, fmt.Errorf("generate chart %s: %w", target, err)
+			return nil, nil, nil, fmt.Errorf("generate chart %s: %w", target, err)
+		}
+
+		after, _, err := readFileIfExists(outputPath)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("read generated output for %s: %w", target, err)
+		}
+
+		if !existedBefore || !slices.Equal(before, after) {
+			logf(stderr, "generated output changed for chart %s -> %s", target, toSlash(relativeOutputPath))
+			changedOutputs = append(changedOutputs, toSlash(relativeOutputPath))
+			changedTargets = append(changedTargets, target)
+		} else {
+			logf(stderr, "generated output unchanged for chart %s -> %s", target, toSlash(relativeOutputPath))
 		}
 
 		processed = append(processed, toSlash(relativeOutputPath))
 	}
 
-	return processed, nil
+	return processed, changedOutputs, changedTargets, nil
 }
 
 func runCheckTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
@@ -637,7 +662,16 @@ func writeOutputs(result Result, writeOutput func(string, string) error) error {
 	if err := writeOutput("matched-paths", strings.Join(result.MatchedPaths, "\n")); err != nil {
 		return err
 	}
-	return writeOutput("processed-paths", strings.Join(result.ProcessedPaths, "\n"))
+	if err := writeOutput("processed-paths", strings.Join(result.ProcessedPaths, "\n")); err != nil {
+		return err
+	}
+	if err := writeOutput("changed-output-paths", strings.Join(result.ChangedOutputPaths, "\n")); err != nil {
+		return err
+	}
+	if err := writeOutput("changed-target-paths", strings.Join(result.ChangedTargetPaths, "\n")); err != nil {
+		return err
+	}
+	return writeOutput("any-processed-changed", fmt.Sprintf("%t", result.AnyProcessedChanged))
 }
 
 func renderSummary(mode string, result Result) string {
@@ -647,6 +681,8 @@ func renderSummary(mode string, result Result) string {
 		fmt.Sprintf("- Changed paths: %d", len(result.ChangedPaths)),
 		fmt.Sprintf("- Matched paths: %d", len(result.MatchedPaths)),
 		fmt.Sprintf("- Processed paths: %d", len(result.ProcessedPaths)),
+		fmt.Sprintf("- Changed generated outputs: %d", len(result.ChangedOutputPaths)),
+		fmt.Sprintf("- Any processed output changed: %t", result.AnyProcessedChanged),
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -694,6 +730,17 @@ func appendKeyValueOutput(envName string, name string, value string) error {
 
 	_, err = fmt.Fprintf(file, "%s<<EOF\n%s\nEOF\n", name, value)
 	return err
+}
+
+func readFileIfExists(path string) ([]byte, bool, error) {
+	content, err := os.ReadFile(path)
+	if err == nil {
+		return content, true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	return nil, false, err
 }
 
 func sortedKeys(values map[string]struct{}) []string {
