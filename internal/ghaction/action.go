@@ -151,7 +151,7 @@ func Run(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer) er
 }
 
 func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer, deps Dependencies) error {
-	repoRoot, err := deps.Getwd()
+	repoRoot, err := resolveRepoRoot(deps.Getwd, deps.LookupEnv)
 	if err != nil {
 		return err
 	}
@@ -234,6 +234,13 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 
 	logf(stderr, "completed mode %q for %d target(s)", cfg.Mode, len(result.ProcessedPaths))
 	return deps.WriteSummary(renderSummary(cfg.Mode, result))
+}
+
+func resolveRepoRoot(getwd func() (string, error), lookupEnv func(string) (string, bool)) (string, error) {
+	if workspace, ok := lookupEnv("GITHUB_WORKSPACE"); ok && strings.TrimSpace(workspace) != "" {
+		return workspace, nil
+	}
+	return getwd()
 }
 
 func maybeLoginRegistry(cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) error {

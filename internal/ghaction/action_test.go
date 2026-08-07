@@ -45,6 +45,37 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 	}
 }
 
+func TestResolveRepoRootPrefersGitHubWorkspace(t *testing.T) {
+	repoRoot, err := resolveRepoRoot(func() (string, error) {
+		return "/tmp/cwd", nil
+	}, func(key string) (string, bool) {
+		if key == "GITHUB_WORKSPACE" {
+			return "/github/workspace", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("resolveRepoRoot returned error: %v", err)
+	}
+	if repoRoot != "/github/workspace" {
+		t.Fatalf("unexpected repo root: %q", repoRoot)
+	}
+}
+
+func TestResolveRepoRootFallsBackToGetwd(t *testing.T) {
+	repoRoot, err := resolveRepoRoot(func() (string, error) {
+		return "/tmp/cwd", nil
+	}, func(key string) (string, bool) {
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("resolveRepoRoot returned error: %v", err)
+	}
+	if repoRoot != "/tmp/cwd" {
+		t.Fatalf("unexpected repo root: %q", repoRoot)
+	}
+}
+
 func TestChangedPathsBetweenCommits(t *testing.T) {
 	repoRoot := t.TempDir()
 
