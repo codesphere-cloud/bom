@@ -19,6 +19,7 @@ type TemplateRequest struct {
 	SetValues   []string
 	SetStrings  []string
 	ExtraArgs   []string
+	Debug       bool
 }
 
 type Renderer struct{}
@@ -33,6 +34,9 @@ func (Renderer) Template(req TemplateRequest) ([]byte, error) {
 	}
 
 	args := []string{"template", req.ReleaseName, req.ChartPath, "--namespace", req.Namespace}
+	if req.Debug {
+		args = append(args, "--debug")
+	}
 
 	for _, valuesFile := range req.ValuesFiles {
 		args = append(args, "--values", valuesFile)

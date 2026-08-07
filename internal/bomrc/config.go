@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const fileName = ".bomrc.yml"
+var fileNames = []string{".bomrc.yml", ".bomrc.yaml"}
 
 type Config struct {
 	AdditionalImages []AdditionalImage `json:"additionalImages"`
@@ -28,19 +28,23 @@ type ResourceRef struct {
 }
 
 func Load(chartPath string) (Config, error) {
-	path := filepath.Join(chartPath, fileName)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Config{}, nil
+	for _, fileName := range fileNames {
+		path := filepath.Join(chartPath, fileName)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return Config{}, fmt.Errorf("read %s: %w", path, err)
 		}
-		return Config{}, fmt.Errorf("read %s: %w", path, err)
+
+		var cfg Config
+		if err := yaml.Unmarshal(content, &cfg); err != nil {
+			return Config{}, fmt.Errorf("parse %s: %w", path, err)
+		}
+
+		return cfg, nil
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-
-	return cfg, nil
+	return Config{}, nil
 }

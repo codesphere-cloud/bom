@@ -126,7 +126,7 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 	}
 
 	ref.Sources = []string{
-		fmt.Sprintf("%s/%s configured by .bomrc.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),
+		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),
 	}
 	return ref, nil
 }

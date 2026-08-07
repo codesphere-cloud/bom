@@ -23,6 +23,7 @@ type Config struct {
 	Mode                         string
 	Paths                        string
 	ChangedOnly                  bool
+	Debug                        bool
 	Format                       string
 	Namespace                    string
 	ReleaseName                  string
@@ -152,12 +153,16 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 		return err
 	}
 
+	logf(stderr, "starting helm-bom action in %q mode", cfg.Mode)
+	logf(stderr, "repository root: %s", repoRoot)
+
 	if err := maybeLoginRegistry(cfg, stdout, stderr, deps.RunCLI); err != nil {
 		return err
 	}
 
 	changedPaths := []string(nil)
 	if cfg.ChangedOnly {
+		logf(stderr, "resolving changed paths from GitHub event")
 		baseSHA, headSHA, rangeErr := resolveGitRange(cfg, deps.ReadFile, deps.LookupEnv)
 		if rangeErr != nil {
 			return rangeErr
@@ -167,11 +172,20 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 		if err != nil {
 			return err
 		}
+		logf(stderr, "found %d changed path(s)", len(changedPaths))
 	}
 
 	targets, err := resolveTargets(cfg, repoRoot, changedPaths, deps.Stat, deps.WalkDir)
 	if err != nil {
 		return err
+	}
+	switch cfg.Mode {
+	case "generate":
+		logf(stderr, "found %d chart(s) to process", len(targets))
+	case "check":
+		logf(stderr, "found %d BOM file(s) to process", len(targets))
+	default:
+		logf(stderr, "found %d target path(s) for mode %q", len(targets), cfg.Mode)
 	}
 
 	result := Result{
@@ -193,7 +207,7 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 	case "generate":
 		result.ProcessedPaths, err = runGenerateTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
 	case "check":
-		result.ProcessedPaths, err = runCheckTargets(repoRoot, targets, stdout, stderr, deps.RunCLI)
+		result.ProcessedPaths, err = runCheckTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
 	default:
 		return fmt.Errorf("unsupported mode %q", cfg.Mode)
 	}
@@ -205,6 +219,7 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 		return err
 	}
 
+	logf(stderr, "completed mode %q for %d target(s)", cfg.Mode, len(result.ProcessedPaths))
 	return deps.WriteSummary(renderSummary(cfg.Mode, result))
 }
 
@@ -212,6 +227,7 @@ func maybeLoginRegistry(cfg Config, stdout io.Writer, stderr io.Writer, runCLI f
 	if strings.TrimSpace(cfg.RegistryServer) == "" {
 		return nil
 	}
+	logf(stderr, "logging in to registry %s", cfg.RegistryServer)
 
 	args := []string{
 		"registry",
@@ -221,6 +237,9 @@ func maybeLoginRegistry(cfg Config, stdout io.Writer, stderr io.Writer, runCLI f
 		cfg.RegistryUsername,
 		"--password",
 		cfg.RegistryPassword,
+	}
+	if cfg.Debug {
+		args = append(args, "--debug")
 	}
 
 	return runCLI(args, stdout, stderr)
@@ -478,6 +497,7 @@ func filterCheckTargetsByChangedPaths(targets []string, changedPaths []string) [
 func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
 	processed := make([]string, 0, len(targets))
 	for _, target := range targets {
+		logf(stderr, "generating BOM for chart %s", target)
 		relativeOutputPath := buildGenerateOutputPath(target, cfg.Format)
 		outputPath := relativeOutputPath
 		if !filepath.IsAbs(outputPath) {
@@ -497,9 +517,12 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 		if cfg.ValidateConfiguredImageExist {
 			args = append(args, "--validate-configured-image-exists")
 		}
+		if cfg.Debug {
+			args = append(args, "--debug")
+		}
 
 		if err := runCLI(args, stdout, stderr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("generate chart %s: %w", target, err)
 		}
 
 		processed = append(processed, toSlash(relativeOutputPath))
@@ -508,11 +531,16 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 	return processed, nil
 }
 
-func runCheckTargets(repoRoot string, targets []string, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
+func runCheckTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
 	processed := make([]string, 0, len(targets))
 	for _, target := range targets {
-		if err := runCLI([]string{"check", filepath.Join(repoRoot, filepath.FromSlash(target))}, stdout, stderr); err != nil {
-			return nil, err
+		logf(stderr, "checking BOM %s", target)
+		args := []string{"check", filepath.Join(repoRoot, filepath.FromSlash(target))}
+		if cfg.Debug {
+			args = append(args, "--debug")
+		}
+		if err := runCLI(args, stdout, stderr); err != nil {
+			return nil, fmt.Errorf("check BOM %s: %w", target, err)
 		}
 		processed = append(processed, target)
 	}
@@ -601,6 +629,13 @@ func renderSummary(mode string, result Result) string {
 		fmt.Sprintf("- Processed paths: %d", len(result.ProcessedPaths)),
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func logf(w io.Writer, format string, args ...any) {
+	if w == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "helm-bom-action: "+format+"\n", args...)
 }
 
 func appendKeyValueOutput(envName string, name string, value string) error {

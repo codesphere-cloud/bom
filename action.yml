@@ -12,6 +12,10 @@ inputs:
     description: Restrict processing to paths changed in the current push or pull request.
     required: false
     default: "false"
+  debug:
+    description: Enable debug logging and pass --debug through to helm-bom subcommands.
+    required: false
+    default: "false"
   format:
     description: Output format used in generate mode.
     required: false
@@ -58,6 +62,7 @@ runs:
     - --mode=${{ inputs.mode }}
     - --paths=${{ inputs.paths }}
     - --changed-only=${{ inputs.changed-only }}
+    - --debug=${{ inputs.debug }}
     - --format=${{ inputs.format }}
     - --release-name=${{ inputs.release-name }}
     - --namespace=${{ inputs.namespace }}

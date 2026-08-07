@@ -19,6 +19,7 @@ const version = "dev"
 
 type config struct {
 	chartPath                    string
+	debug                        bool
 	releaseName                  string
 	namespace                    string
 	format                       string
@@ -32,10 +33,12 @@ type config struct {
 
 type checkConfig struct {
 	bomPath string
+	debug   bool
 }
 
 type registryLoginConfig struct {
 	server        string
+	debug         bool
 	username      string
 	password      string
 	passwordStdin bool
@@ -91,6 +94,7 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 }
 
 func addGenerateFlags(flags *pflag.FlagSet, cfg *config) {
+	flags.BoolVar(&cfg.debug, "debug", false, "Enable debug logging.")
 	flags.StringVar(&cfg.releaseName, "release-name", "", "Helm release name. Defaults to the chart name from Chart.yaml.")
 	flags.StringVar(&cfg.namespace, "namespace", "default", "Namespace passed to helm template.")
 	flags.StringVar(&cfg.format, "format", "spdx-json", "Output format: spdx-json, spdx, csbom-json, csbom-yaml, or csbom.")
@@ -143,6 +147,7 @@ func newCheckCommand(stdout io.Writer, cfg *checkConfig) *cobra.Command {
 	}
 
 	cmd.SetOut(stdout)
+	cmd.Flags().BoolVar(&cfg.debug, "debug", false, "Enable debug logging.")
 
 	return cmd
 }
@@ -179,6 +184,7 @@ func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.
 
 	cmd.SetOut(stdout)
 	flags := cmd.Flags()
+	flags.BoolVar(&cfg.debug, "debug", false, "Enable debug logging.")
 	flags.StringVarP(&cfg.username, "username", "u", "", "Username")
 	flags.StringVarP(&cfg.password, "password", "p", "", "Password")
 	flags.BoolVar(&cfg.passwordStdin, "password-stdin", false, "Take the password from stdin")
@@ -219,6 +225,7 @@ func runGenerate(stdout io.Writer, cfg config) error {
 		SetValues:   cfg.setValues,
 		SetStrings:  cfg.setStrings,
 		ExtraArgs:   cfg.helmArgs,
+		Debug:       cfg.debug,
 	})
 	if err != nil {
 		return err
@@ -283,7 +290,7 @@ func prependDummyValuesFile(valuesFiles *[]string, dummyValues map[string]any) (
 
 	content, err := yaml.Marshal(dummyValues)
 	if err != nil {
-		return nil, fmt.Errorf("marshal .bomrc.yml dummyValues: %w", err)
+		return nil, fmt.Errorf("marshal .bomrc dummyValues: %w", err)
 	}
 
 	file, err := os.CreateTemp("", "helm-bom-dummy-values-*.yaml")

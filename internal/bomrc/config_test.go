@@ -30,7 +30,7 @@ dummyValues:
     repository: ghcr.io/example/api
     tag: latest
 `)
-	if err := os.WriteFile(filepath.Join(chartPath, fileName), content, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -60,5 +60,56 @@ dummyValues:
 	}
 	if imageValues["tag"] != "latest" {
 		t.Fatalf("unexpected dummy tag: %#v", imageValues["tag"])
+	}
+}
+
+func TestLoadSupportsYAMLConfigName(t *testing.T) {
+	chartPath := t.TempDir()
+	content := []byte(`
+additionalImages:
+  - resource:
+      apiVersion: v1
+      kind: ConfigMap
+      name: extra-images
+    image: .data.sidecar
+`)
+	if err := os.WriteFile(filepath.Join(chartPath, fileNames[1]), content, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(chartPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if len(cfg.AdditionalImages) != 1 {
+		t.Fatalf("expected 1 additional image, got %d", len(cfg.AdditionalImages))
+	}
+}
+
+func TestLoadPrefersYMLWhenBothFilesExist(t *testing.T) {
+	chartPath := t.TempDir()
+	ymlContent := []byte(`
+dummyValues:
+  marker: yml
+`)
+	yamlContent := []byte(`
+dummyValues:
+  marker: yaml
+`)
+	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), ymlContent, 0o644); err != nil {
+		t.Fatalf("write yml config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(chartPath, fileNames[1]), yamlContent, 0o644); err != nil {
+		t.Fatalf("write yaml config: %v", err)
+	}
+
+	cfg, err := Load(chartPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.DummyValues["marker"] != "yml" {
+		t.Fatalf("expected .bomrc.yml to win, got %#v", cfg.DummyValues["marker"])
 	}
 }

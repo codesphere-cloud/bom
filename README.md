@@ -2,7 +2,7 @@
 
 `helm-bom` templates a Helm chart, extracts OCI image references from supported Kubernetes workload primitives, emits either SPDX JSON or the internal `csbom` format in JSON or YAML, and can validate a generated BOM against upstream image registries.
 
-If a chart contains a `.bomrc.yml` file, `helm-bom` also evaluates any configured `additionalImages` entries against the rendered manifest and merges those image references into the output.
+If a chart contains a `.bomrc.yml` or `.bomrc.yaml` file, `helm-bom` also evaluates any configured `additionalImages` entries against the rendered manifest and merges those image references into the output.
 
 ## Usage
 
@@ -140,9 +140,9 @@ Supported Kubernetes primitives are handled explicitly rather than via generic Y
 - `CronJob`
 - `List` containing any of the above
 
-## `.bomrc.yml`
+## `.bomrc.yaml` / `.bomrc.yml`
 
-Per-chart extra image discovery can be configured with an optional `.bomrc.yml` file in the chart root:
+Per-chart extra image discovery can be configured with an optional `.bomrc.yaml` or `.bomrc.yml` file in the chart root:
 
 ```yaml
 dummyValues:
