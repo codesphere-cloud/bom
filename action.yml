@@ -57,7 +57,7 @@ outputs:
     description: Newline-separated generated BOM files or checked BOM paths.
 runs:
   using: docker
-  image: docker://ghcr.io/codesphere-cloud/helm-bom@sha256:4d475306a001a044822dd4043858e0fdcaa973636457d12ceb2134a0e9003091
+  image: docker://ghcr.io/codesphere-cloud/helm-bom@sha256:f36b2b459bab8d99367ff11310202db14eefedd979a71767d4c443313f99f0d0
   args:
     - --mode=${{ inputs.mode }}
     - --paths=${{ inputs.paths }}
