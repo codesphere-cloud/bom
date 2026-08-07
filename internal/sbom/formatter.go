@@ -18,6 +18,10 @@ func NewFormatter(name string) (Formatter, error) {
 		return CSBOMYAMLFormatter{}, nil
 	case "csbom-json":
 		return CSBOMJSONFormatter{}, nil
+	case "csbom-v2", "csbom-v2-yaml":
+		return CSBOMV2YAMLFormatter{}, nil
+	case "csbom-v2-json":
+		return CSBOMV2JSONFormatter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported format %q", name)
 	}

@@ -138,12 +138,12 @@ func changedPathsBetweenCommits(ctx context.Context, repoRoot string, baseSHA st
 }
 
 type Result struct {
-	ChangedPaths         []string
-	MatchedPaths         []string
-	ProcessedPaths       []string
-	ChangedOutputPaths   []string
-	ChangedTargetPaths   []string
-	AnyProcessedChanged  bool
+	ChangedPaths        []string
+	MatchedPaths        []string
+	ProcessedPaths      []string
+	ChangedOutputPaths  []string
+	ChangedTargetPaths  []string
+	AnyProcessedChanged bool
 }
 
 type actionRunner struct {
@@ -666,7 +666,7 @@ func (r actionRunner) finish(result Result) error {
 
 func buildGenerateOutputPath(target string, format string) string {
 	ext := ".json"
-	if format == "csbom" || format == "csbom-yaml" {
+	if format == "csbom" || format == "csbom-yaml" || format == "csbom-v2" || format == "csbom-v2-yaml" {
 		ext = ".yaml"
 	}
 

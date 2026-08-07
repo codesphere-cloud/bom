@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	intcsbom "github.com/codesphere-cloud/helm-bom/internal/csbom"
+	intcsbomv2 "github.com/codesphere-cloud/helm-bom/internal/csbom/v2"
 	"github.com/codesphere-cloud/helm-bom/internal/images"
 	spdxjson "github.com/spdx/tools-golang/json"
 	"sigs.k8s.io/yaml"
@@ -24,6 +25,10 @@ func Parse(r io.Reader) (Document, error) {
 	}
 
 	if document, parseErr := parseCSBOM(content); parseErr == nil {
+		return document, nil
+	}
+
+	if document, parseErr := parseCSBOMV2(content); parseErr == nil {
 		return document, nil
 	}
 
@@ -128,6 +133,40 @@ func parseCSBOM(content []byte) (Document, error) {
 	if len(components) == 0 {
 		return Document{}, fmt.Errorf("csbom does not contain container images")
 	}
+
+	return Document{Components: components}, nil
+}
+
+func parseCSBOMV2(content []byte) (Document, error) {
+	var payload intcsbomv2.BOM
+	if err := yaml.Unmarshal(content, &payload); err != nil {
+		return Document{}, err
+	}
+
+	if len(payload.ContainerImages) == 0 {
+		return Document{}, fmt.Errorf("csbom v2 does not contain container images")
+	}
+
+	components := make([]Component, 0, len(payload.ContainerImages))
+	for repository, image := range payload.ContainerImages {
+		ref, ok := images.ParseImageRef(image.Ref)
+		if !ok {
+			return Document{}, fmt.Errorf("invalid image reference %q in csbom v2", image.Ref)
+		}
+
+		components = append(components, Component{
+			Type:       "oci-image",
+			Repository: repository,
+			Reference:  ref.Reference,
+			Tag:        ref.Tag,
+			Digest:     ref.Digest,
+			Evidence:   image.Sources,
+		})
+	}
+
+	slices.SortFunc(components, func(left Component, right Component) int {
+		return strings.Compare(left.Reference, right.Reference)
+	})
 
 	return Document{Components: components}, nil
 }

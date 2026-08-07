@@ -315,6 +315,14 @@ func TestBuildGenerateOutputPath(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateOutputPathCSBOMV2YAML(t *testing.T) {
+	got := buildGenerateOutputPath("charts/api", "csbom-v2-yaml")
+	want := filepath.Join("charts", "api", "bom.yaml")
+	if got != want {
+		t.Fatalf("unexpected output path:\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
 func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 	repoRoot := t.TempDir()
 	chartDir := filepath.Join(repoRoot, "charts", "api")

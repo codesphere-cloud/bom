@@ -58,11 +58,12 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Short: "Generate and validate SBOMs for OCI images referenced by Helm charts",
 		Long: "helm-bom renders a Helm chart with helm template, extracts OCI image references " +
 			"from supported Kubernetes workload resources, writes the result in either SPDX JSON " +
-			"or the internal csbom JSON/YAML formats, and can validate a generated BOM against upstream registries.",
+			"or the internal csbom/csbom-v2 JSON/YAML formats, and can validate a generated BOM against upstream registries.",
 		Example: "" +
 			"  helm-bom ./chart\n" +
 			"  helm-bom generate ./chart --values values.yaml --set image.tag=1.2.3\n" +
 			"  helm-bom generate ./chart --format csbom-json --output bom.json\n" +
+			"  helm-bom generate ./chart --format csbom-v2-yaml --output bom.yaml\n" +
 			"  helm-bom check bom.json\n" +
 			"  helm-bom generate ./chart --release-name my-release --namespace production",
 		Args:          cobra.MaximumNArgs(1),
@@ -97,7 +98,7 @@ func addGenerateFlags(flags *pflag.FlagSet, cfg *config) {
 	flags.BoolVar(&cfg.debug, "debug", false, "Enable debug logging.")
 	flags.StringVar(&cfg.releaseName, "release-name", "", "Helm release name. Defaults to the chart name from Chart.yaml.")
 	flags.StringVar(&cfg.namespace, "namespace", "default", "Namespace passed to helm template.")
-	flags.StringVar(&cfg.format, "format", "spdx-json", "Output format: spdx-json, spdx, csbom-json, csbom-yaml, or csbom.")
+	flags.StringVar(&cfg.format, "format", "spdx-json", "Output format: spdx-json, spdx, csbom-json, csbom-yaml, csbom, csbom-v2-json, csbom-v2-yaml, or csbom-v2.")
 	flags.StringVarP(&cfg.outputPath, "output", "o", "", "Write output to a file instead of stdout.")
 	flags.StringSliceVar(&cfg.valuesFiles, "values", nil, "Additional Helm values files. May be specified multiple times.")
 	flags.StringSliceVar(&cfg.setValues, "set", nil, "Helm --set overrides. May be specified multiple times.")

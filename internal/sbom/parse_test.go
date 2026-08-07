@@ -31,6 +31,76 @@ components:
 	}
 }
 
+func TestParseCSBOMV2YAML(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+version: "2"
+name: chart
+containerImages:
+  ghcr.io/example/api:
+    ref: ghcr.io/example/api:1.2.3
+    sources:
+      - Deployment/api spec.containers[0]
+  quay.io/example/worker:
+    ref: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	got := ImageRefs(document)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 image refs, got %d", len(got))
+	}
+
+	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
+		t.Fatalf("unexpected first ref: %q", got[0].Reference)
+	}
+
+	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("unexpected second ref: %q", got[1].Reference)
+	}
+
+	if len(document.Components[0].Evidence) != 1 || document.Components[0].Evidence[0] != "Deployment/api spec.containers[0]" {
+		t.Fatalf("unexpected evidence: %#v", document.Components[0].Evidence)
+	}
+}
+
+func TestParseCSBOMV2JSON(t *testing.T) {
+	document, err := Parse(strings.NewReader(`{
+  "version": "2",
+  "name": "chart",
+  "containerImages": {
+    "ghcr.io/example/api": {
+      "ref": "ghcr.io/example/api:1.2.3",
+      "sources": ["Deployment/api spec.containers[0]"]
+    },
+    "quay.io/example/worker": {
+      "ref": "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  }
+}`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	got := ImageRefs(document)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 image refs, got %d", len(got))
+	}
+
+	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
+		t.Fatalf("unexpected first ref: %q", got[0].Reference)
+	}
+
+	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("unexpected second ref: %q", got[1].Reference)
+	}
+
+	if len(document.Components[0].Evidence) != 1 || document.Components[0].Evidence[0] != "Deployment/api spec.containers[0]" {
+		t.Fatalf("unexpected evidence: %#v", document.Components[0].Evidence)
+	}
+}
+
 func TestParseSPDXJSON(t *testing.T) {
 	document, err := Parse(strings.NewReader(`{
   "spdxVersion": "SPDX-2.3",
