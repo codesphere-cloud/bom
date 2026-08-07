@@ -1,0 +1,47 @@
+# Copyright (c) Codesphere GmbH
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Auto-Update Docs & Licenses'
+
+permissions:
+  contents: write
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  update-files:
+    # skip runs triggered by the bot's own commit to avoid loops and runs triggered by renovate
+    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.pull_request.head.ref, 'renovate/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # on push to main, use main; on PR, check out the PR head
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          # Use PAT to ensure commits trigger other workflows
+          token: ${{ secrets.PAT_UPDATE_DOCS }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Update docs & licenses
+        run: |
+          make generate-license
+
+      - name: Commit and push auto-generated changes
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9
+        with:
+          # Use the PR author's identity for the commit
+          author_name: ${{ github.event.pull_request.user.login }}
+          author_email: ${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com
+          
+          # Commit message
+          message: 'chore(docs): Auto-update docs and licenses'
+          
+          # Adds a sign-off to the commit message for DCO
+          commit: '--signoff'

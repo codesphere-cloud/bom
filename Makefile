@@ -44,3 +44,10 @@ lint: ## Run the linter
 
 clean: ## Remove build artifacts
 	rm -rf bin dist .tmp
+
+generate-license: generate
+	go tool go-licenses report --template .NOTICE.template ./... > NOTICE
+	copywrite headers apply
+
+generate-notice:
+	go tool go-licenses report --template .NOTICE.template ./... > NOTICE
