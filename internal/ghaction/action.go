@@ -146,6 +146,16 @@ type Result struct {
 	AnyProcessedChanged  bool
 }
 
+type actionRunner struct {
+	ctx             context.Context
+	cfg             Config
+	deps            Dependencies
+	stdout          io.Writer
+	stderr          io.Writer
+	repoRoot        string
+	configuredPaths []string
+}
+
 func Run(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer) error {
 	return RunWithDependencies(ctx, cfg, stdout, stderr, defaultDependencies())
 }
@@ -156,84 +166,16 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 		return err
 	}
 
-	logf(stderr, "starting helm-bom action in %q mode", cfg.Mode)
-	logf(stderr, "repository root: %s", repoRoot)
-	logf(stderr, "config: changed-only=%t format=%q namespace=%q release-name=%q fail-on-no-matches=%t", cfg.ChangedOnly, cfg.Format, cfg.Namespace, cfg.ReleaseName, cfg.FailOnNoMatches)
-	logf(stderr, "raw paths input: %q", cfg.Paths)
-	configuredPaths := parseList(cfg.Paths)
-	logList(stderr, "parsed paths input", configuredPaths)
-
-	if err := maybeLoginRegistry(cfg, stdout, stderr, deps.RunCLI); err != nil {
-		return err
+	runner := actionRunner{
+		ctx:             ctx,
+		cfg:             cfg,
+		deps:            deps,
+		stdout:          stdout,
+		stderr:          stderr,
+		repoRoot:        repoRoot,
+		configuredPaths: parseList(cfg.Paths),
 	}
-
-	changedPaths := []string(nil)
-	if cfg.ChangedOnly {
-		logf(stderr, "resolving changed paths from GitHub event")
-		eventName, eventPath, baseSHA, headSHA, rangeErr := resolveGitRange(cfg, deps.ReadFile, deps.LookupEnv)
-		if rangeErr != nil {
-			return rangeErr
-		}
-		logf(stderr, "resolved git range for event %q from payload %q: %s..%s", eventName, eventPath, baseSHA, headSHA)
-
-		changedPaths, err = deps.RunGitDiff(ctx, repoRoot, baseSHA, headSHA)
-		if err != nil {
-			return err
-		}
-		logf(stderr, "found %d changed path(s)", len(changedPaths))
-		logList(stderr, "changed paths", changedPaths)
-	}
-
-	targets, err := resolveTargets(cfg, repoRoot, configuredPaths, changedPaths, deps.Stat, deps.WalkDir, stderr)
-	if err != nil {
-		return err
-	}
-	switch cfg.Mode {
-	case "generate":
-		logf(stderr, "found %d chart(s) to process", len(targets))
-		logList(stderr, "matched chart targets", targets)
-	case "check":
-		logf(stderr, "found %d BOM file(s) to process", len(targets))
-		logList(stderr, "matched BOM targets", targets)
-	default:
-		logf(stderr, "found %d target path(s) for mode %q", len(targets), cfg.Mode)
-		logList(stderr, "matched targets", targets)
-	}
-
-	result := Result{
-		ChangedPaths: changedPaths,
-		MatchedPaths: targets,
-	}
-
-	if len(targets) == 0 {
-		if cfg.FailOnNoMatches {
-			return errors.New("no matching paths to process")
-		}
-		if err := writeOutputs(result, deps.WriteOutput); err != nil {
-			return err
-		}
-		return deps.WriteSummary(renderSummary(cfg.Mode, result))
-	}
-
-	switch cfg.Mode {
-	case "generate":
-		result.ProcessedPaths, result.ChangedOutputPaths, result.ChangedTargetPaths, err = runGenerateTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
-	case "check":
-		result.ProcessedPaths, err = runCheckTargets(repoRoot, targets, cfg, stdout, stderr, deps.RunCLI)
-	default:
-		return fmt.Errorf("unsupported mode %q", cfg.Mode)
-	}
-	if err != nil {
-		return err
-	}
-	result.AnyProcessedChanged = len(result.ChangedOutputPaths) > 0
-
-	if err := writeOutputs(result, deps.WriteOutput); err != nil {
-		return err
-	}
-
-	logf(stderr, "completed mode %q for %d target(s)", cfg.Mode, len(result.ProcessedPaths))
-	return deps.WriteSummary(renderSummary(cfg.Mode, result))
+	return runner.run()
 }
 
 func resolveRepoRoot(getwd func() (string, error), lookupEnv func(string) (string, bool)) (string, error) {
@@ -243,36 +185,98 @@ func resolveRepoRoot(getwd func() (string, error), lookupEnv func(string) (strin
 	return getwd()
 }
 
-func maybeLoginRegistry(cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) error {
-	if strings.TrimSpace(cfg.RegistryServer) == "" {
+func (r actionRunner) run() error {
+	logf(r.stderr, "starting helm-bom action in %q mode", r.cfg.Mode)
+	logf(r.stderr, "repository root: %s", r.repoRoot)
+	logf(r.stderr, "config: changed-only=%t format=%q namespace=%q release-name=%q fail-on-no-matches=%t", r.cfg.ChangedOnly, r.cfg.Format, r.cfg.Namespace, r.cfg.ReleaseName, r.cfg.FailOnNoMatches)
+	logf(r.stderr, "raw paths input: %q", r.cfg.Paths)
+	logList(r.stderr, "parsed paths input", r.configuredPaths)
+
+	if err := r.maybeLoginRegistry(); err != nil {
+		return err
+	}
+
+	changedPaths, err := r.resolveChangedPaths()
+	if err != nil {
+		return err
+	}
+
+	targets, err := r.resolveTargets(changedPaths)
+	if err != nil {
+		return err
+	}
+	r.logMatchedTargets(targets)
+
+	result := Result{
+		ChangedPaths: changedPaths,
+		MatchedPaths: targets,
+	}
+
+	if len(targets) == 0 {
+		if r.cfg.FailOnNoMatches {
+			return errors.New("no matching paths to process")
+		}
+		return r.finish(result)
+	}
+
+	if err := r.runTargets(&result, targets); err != nil {
+		return err
+	}
+
+	return r.finish(result)
+}
+
+func (r actionRunner) maybeLoginRegistry() error {
+	if strings.TrimSpace(r.cfg.RegistryServer) == "" {
 		return nil
 	}
-	logf(stderr, "logging in to registry %s", cfg.RegistryServer)
+	logf(r.stderr, "logging in to registry %s", r.cfg.RegistryServer)
 
 	args := []string{
 		"registry",
 		"login",
-		cfg.RegistryServer,
+		r.cfg.RegistryServer,
 		"--username",
-		cfg.RegistryUsername,
+		r.cfg.RegistryUsername,
 		"--password",
-		cfg.RegistryPassword,
+		r.cfg.RegistryPassword,
 	}
-	if cfg.Debug {
+	if r.cfg.Debug {
 		args = append(args, "--debug")
 	}
 
-	return runCLI(args, stdout, stderr)
+	return r.deps.RunCLI(args, r.stdout, r.stderr)
 }
 
-func resolveGitRange(cfg Config, readFile func(string) ([]byte, error), lookupEnv func(string) (string, bool)) (string, string, string, string, error) {
-	eventName, _ := lookupEnv("GITHUB_EVENT_NAME")
-	eventPath, _ := lookupEnv("GITHUB_EVENT_PATH")
+func (r actionRunner) resolveChangedPaths() ([]string, error) {
+	if !r.cfg.ChangedOnly {
+		return nil, nil
+	}
+
+	logf(r.stderr, "resolving changed paths from GitHub event")
+	eventName, eventPath, baseSHA, headSHA, err := r.resolveGitRange()
+	if err != nil {
+		return nil, err
+	}
+	logf(r.stderr, "resolved git range for event %q from payload %q: %s..%s", eventName, eventPath, baseSHA, headSHA)
+
+	changedPaths, err := r.deps.RunGitDiff(r.ctx, r.repoRoot, baseSHA, headSHA)
+	if err != nil {
+		return nil, err
+	}
+	logf(r.stderr, "found %d changed path(s)", len(changedPaths))
+	logList(r.stderr, "changed paths", changedPaths)
+	return changedPaths, nil
+}
+
+func (r actionRunner) resolveGitRange() (string, string, string, string, error) {
+	eventName, _ := r.deps.LookupEnv("GITHUB_EVENT_NAME")
+	eventPath, _ := r.deps.LookupEnv("GITHUB_EVENT_PATH")
 	if strings.TrimSpace(eventPath) == "" {
 		return "", "", "", "", errors.New("changed-only requires GITHUB_EVENT_PATH")
 	}
 
-	content, err := readFile(eventPath)
+	content, err := r.deps.ReadFile(eventPath)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("read GitHub event payload: %w", err)
 	}
@@ -311,55 +315,55 @@ type githubEvent struct {
 	} `json:"pull_request"`
 }
 
-func resolveTargets(cfg Config, repoRoot string, patterns []string, changedPaths []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error, stderr io.Writer) ([]string, error) {
-	switch cfg.Mode {
+func (r actionRunner) resolveTargets(changedPaths []string) ([]string, error) {
+	switch r.cfg.Mode {
 	case "generate":
-		targets, err := resolveGenerateTargets(repoRoot, patterns, stat, walkDir)
+		targets, err := r.resolveGenerateTargets()
 		if err != nil {
 			return nil, err
 		}
-		logList(stderr, "generate targets before changed-path filtering", targets)
+		logList(r.stderr, "generate targets before changed-path filtering", targets)
 		filtered := filterGenerateTargetsByChangedPaths(targets, changedPaths)
 		if len(changedPaths) > 0 && len(filtered) == 0 && len(targets) > 0 {
-			logf(stderr, "changed-path filtering removed all generate targets")
+			logf(r.stderr, "changed-path filtering removed all generate targets")
 		}
 		return filtered, nil
 	case "check":
-		targets, err := resolveCheckTargets(repoRoot, patterns, stat, walkDir)
+		targets, err := r.resolveCheckTargets()
 		if err != nil {
 			return nil, err
 		}
-		logList(stderr, "check targets before changed-path filtering", targets)
+		logList(r.stderr, "check targets before changed-path filtering", targets)
 		filtered := filterCheckTargetsByChangedPaths(targets, changedPaths)
 		if len(changedPaths) > 0 && len(filtered) == 0 && len(targets) > 0 {
-			logf(stderr, "changed-path filtering removed all check targets")
+			logf(r.stderr, "changed-path filtering removed all check targets")
 		}
 		return filtered, nil
 	default:
-		return nil, fmt.Errorf("unsupported mode %q", cfg.Mode)
+		return nil, fmt.Errorf("unsupported mode %q", r.cfg.Mode)
 	}
 }
 
-func resolveGenerateTargets(repoRoot string, patterns []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
-	if len(patterns) == 0 {
+func (r actionRunner) resolveGenerateTargets() ([]string, error) {
+	if len(r.configuredPaths) == 0 {
 		// No explicit paths means scan the repository for charts.
-		return discoverChartDirs(repoRoot, walkDir)
+		return r.discoverChartDirs()
 	}
 
 	targetSet := map[string]struct{}{}
-	for _, pattern := range patterns {
-		matches, err := expandPattern(repoRoot, pattern)
+	for _, pattern := range r.configuredPaths {
+		matches, err := expandPattern(r.repoRoot, pattern)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, match := range matches {
-			info, err := stat(match)
+			info, err := r.deps.Stat(match)
 			if err != nil {
 				return nil, err
 			}
 
-			target, err := normalizeGenerateTarget(repoRoot, match, info)
+			target, err := normalizeGenerateTarget(r.repoRoot, match, info)
 			if err != nil {
 				return nil, err
 			}
@@ -371,26 +375,26 @@ func resolveGenerateTargets(repoRoot string, patterns []string, stat func(string
 	return sortedKeys(targetSet), nil
 }
 
-func resolveCheckTargets(repoRoot string, patterns []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
-	if len(patterns) == 0 {
-		return discoverBOMPaths(repoRoot, walkDir)
+func (r actionRunner) resolveCheckTargets() ([]string, error) {
+	if len(r.configuredPaths) == 0 {
+		return r.discoverBOMPaths()
 	}
 
 	targetSet := map[string]struct{}{}
-	for _, pattern := range patterns {
-		matches, err := expandPattern(repoRoot, pattern)
+	for _, pattern := range r.configuredPaths {
+		matches, err := expandPattern(r.repoRoot, pattern)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, match := range matches {
-			info, err := stat(match)
+			info, err := r.deps.Stat(match)
 			if err != nil {
 				return nil, err
 			}
 
 			if info.IsDir() {
-				if err := walkDir(match, func(path string, entry fs.DirEntry, walkErr error) error {
+				if err := r.deps.WalkDir(match, func(path string, entry fs.DirEntry, walkErr error) error {
 					if walkErr != nil {
 						return walkErr
 					}
@@ -400,7 +404,7 @@ func resolveCheckTargets(repoRoot string, patterns []string, stat func(string) (
 					if !isSupportedBOMFile(path) {
 						return nil
 					}
-					targetSet[toRelativeSlash(repoRoot, path)] = struct{}{}
+					targetSet[toRelativeSlash(r.repoRoot, path)] = struct{}{}
 					return nil
 				}); err != nil {
 					return nil, err
@@ -409,19 +413,19 @@ func resolveCheckTargets(repoRoot string, patterns []string, stat func(string) (
 			}
 
 			if !isSupportedBOMFile(match) {
-				return nil, fmt.Errorf("check target %q is not a supported BOM file", toRelativeSlash(repoRoot, match))
+				return nil, fmt.Errorf("check target %q is not a supported BOM file", toRelativeSlash(r.repoRoot, match))
 			}
 
-			targetSet[toRelativeSlash(repoRoot, match)] = struct{}{}
+			targetSet[toRelativeSlash(r.repoRoot, match)] = struct{}{}
 		}
 	}
 
 	return sortedKeys(targetSet), nil
 }
 
-func discoverBOMPaths(repoRoot string, walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
+func (r actionRunner) discoverBOMPaths() ([]string, error) {
 	targetSet := map[string]struct{}{}
-	if err := walkDir(repoRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	if err := r.deps.WalkDir(r.repoRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -438,7 +442,7 @@ func discoverBOMPaths(repoRoot string, walkDir func(string, fs.WalkDirFunc) erro
 			return nil
 		}
 
-		targetSet[toRelativeSlash(repoRoot, path)] = struct{}{}
+		targetSet[toRelativeSlash(r.repoRoot, path)] = struct{}{}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -447,9 +451,9 @@ func discoverBOMPaths(repoRoot string, walkDir func(string, fs.WalkDirFunc) erro
 	return sortedKeys(targetSet), nil
 }
 
-func discoverChartDirs(repoRoot string, walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
+func (r actionRunner) discoverChartDirs() ([]string, error) {
 	targetSet := map[string]struct{}{}
-	if err := walkDir(repoRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	if err := r.deps.WalkDir(r.repoRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -466,7 +470,7 @@ func discoverChartDirs(repoRoot string, walkDir func(string, fs.WalkDirFunc) err
 			return nil
 		}
 
-		targetSet[toRelativeSlash(repoRoot, filepath.Dir(path))] = struct{}{}
+		targetSet[toRelativeSlash(r.repoRoot, filepath.Dir(path))] = struct{}{}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -525,16 +529,16 @@ func filterCheckTargetsByChangedPaths(targets []string, changedPaths []string) [
 	return filtered
 }
 
-func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, []string, []string, error) {
+func (r actionRunner) runGenerateTargets(targets []string) ([]string, []string, []string, error) {
 	processed := make([]string, 0, len(targets))
 	changedOutputs := make([]string, 0, len(targets))
 	changedTargets := make([]string, 0, len(targets))
 	for _, target := range targets {
-		logf(stderr, "generating BOM for chart %s", target)
-		relativeOutputPath := buildGenerateOutputPath(target, cfg.Format)
+		logf(r.stderr, "generating BOM for chart %s", target)
+		relativeOutputPath := buildGenerateOutputPath(target, r.cfg.Format)
 		outputPath := relativeOutputPath
 		if !filepath.IsAbs(outputPath) {
-			outputPath = filepath.Join(repoRoot, filepath.FromSlash(relativeOutputPath))
+			outputPath = filepath.Join(r.repoRoot, filepath.FromSlash(relativeOutputPath))
 		}
 
 		before, existedBefore, err := readFileIfExists(outputPath)
@@ -546,21 +550,21 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 			return nil, nil, nil, fmt.Errorf("create output directory for %s: %w", target, err)
 		}
 
-		args := []string{"generate", filepath.Join(repoRoot, filepath.FromSlash(target)), "--format", cfg.Format, "--output", outputPath}
-		if cfg.ReleaseName != "" {
-			args = append(args, "--release-name", cfg.ReleaseName)
+		args := []string{"generate", filepath.Join(r.repoRoot, filepath.FromSlash(target)), "--format", r.cfg.Format, "--output", outputPath}
+		if r.cfg.ReleaseName != "" {
+			args = append(args, "--release-name", r.cfg.ReleaseName)
 		}
-		if cfg.Namespace != "" {
-			args = append(args, "--namespace", cfg.Namespace)
+		if r.cfg.Namespace != "" {
+			args = append(args, "--namespace", r.cfg.Namespace)
 		}
-		if cfg.ValidateConfiguredImageExist {
+		if r.cfg.ValidateConfiguredImageExist {
 			args = append(args, "--validate-configured-image-exists")
 		}
-		if cfg.Debug {
+		if r.cfg.Debug {
 			args = append(args, "--debug")
 		}
 
-		if err := runCLI(args, stdout, stderr); err != nil {
+		if err := r.deps.RunCLI(args, r.stdout, r.stderr); err != nil {
 			return nil, nil, nil, fmt.Errorf("generate chart %s: %w", target, err)
 		}
 
@@ -570,11 +574,11 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 		}
 
 		if !existedBefore || !slices.Equal(before, after) {
-			logf(stderr, "generated output changed for chart %s -> %s", target, toSlash(relativeOutputPath))
+			logf(r.stderr, "generated output changed for chart %s -> %s", target, toSlash(relativeOutputPath))
 			changedOutputs = append(changedOutputs, toSlash(relativeOutputPath))
 			changedTargets = append(changedTargets, target)
 		} else {
-			logf(stderr, "generated output unchanged for chart %s -> %s", target, toSlash(relativeOutputPath))
+			logf(r.stderr, "generated output unchanged for chart %s -> %s", target, toSlash(relativeOutputPath))
 		}
 
 		processed = append(processed, toSlash(relativeOutputPath))
@@ -583,21 +587,60 @@ func runGenerateTargets(repoRoot string, targets []string, cfg Config, stdout io
 	return processed, changedOutputs, changedTargets, nil
 }
 
-func runCheckTargets(repoRoot string, targets []string, cfg Config, stdout io.Writer, stderr io.Writer, runCLI func([]string, io.Writer, io.Writer) error) ([]string, error) {
+func (r actionRunner) runCheckTargets(targets []string) ([]string, error) {
 	processed := make([]string, 0, len(targets))
 	for _, target := range targets {
-		logf(stderr, "checking BOM %s", target)
-		args := []string{"check", filepath.Join(repoRoot, filepath.FromSlash(target))}
-		if cfg.Debug {
+		logf(r.stderr, "checking BOM %s", target)
+		args := []string{"check", filepath.Join(r.repoRoot, filepath.FromSlash(target))}
+		if r.cfg.Debug {
 			args = append(args, "--debug")
 		}
-		if err := runCLI(args, stdout, stderr); err != nil {
+		if err := r.deps.RunCLI(args, r.stdout, r.stderr); err != nil {
 			return nil, fmt.Errorf("check BOM %s: %w", target, err)
 		}
 		processed = append(processed, target)
 	}
 
 	return processed, nil
+}
+
+func (r actionRunner) logMatchedTargets(targets []string) {
+	switch r.cfg.Mode {
+	case "generate":
+		logf(r.stderr, "found %d chart(s) to process", len(targets))
+		logList(r.stderr, "matched chart targets", targets)
+	case "check":
+		logf(r.stderr, "found %d BOM file(s) to process", len(targets))
+		logList(r.stderr, "matched BOM targets", targets)
+	default:
+		logf(r.stderr, "found %d target path(s) for mode %q", len(targets), r.cfg.Mode)
+		logList(r.stderr, "matched targets", targets)
+	}
+}
+
+func (r actionRunner) runTargets(result *Result, targets []string) error {
+	var err error
+	switch r.cfg.Mode {
+	case "generate":
+		result.ProcessedPaths, result.ChangedOutputPaths, result.ChangedTargetPaths, err = r.runGenerateTargets(targets)
+	case "check":
+		result.ProcessedPaths, err = r.runCheckTargets(targets)
+	default:
+		return fmt.Errorf("unsupported mode %q", r.cfg.Mode)
+	}
+	if err != nil {
+		return err
+	}
+	result.AnyProcessedChanged = len(result.ChangedOutputPaths) > 0
+	return nil
+}
+
+func (r actionRunner) finish(result Result) error {
+	if err := writeOutputs(result, r.deps.WriteOutput); err != nil {
+		return err
+	}
+	logf(r.stderr, "completed mode %q for %d target(s)", r.cfg.Mode, len(result.ProcessedPaths))
+	return r.deps.WriteSummary(renderSummary(r.cfg.Mode, result))
 }
 
 func buildGenerateOutputPath(target string, format string) string {

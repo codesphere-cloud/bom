@@ -22,16 +22,23 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 		t.Fatalf("write event payload: %v", err)
 	}
 
-	eventName, gotEventPath, base, head, err := resolveGitRange(Config{}, os.ReadFile, func(key string) (string, bool) {
-		switch key {
-		case "GITHUB_EVENT_NAME":
-			return "pull_request", true
-		case "GITHUB_EVENT_PATH":
-			return eventPath, true
-		default:
-			return "", false
-		}
-	})
+	runner := actionRunner{
+		deps: Dependencies{
+			ReadFile: os.ReadFile,
+			LookupEnv: func(key string) (string, bool) {
+				switch key {
+				case "GITHUB_EVENT_NAME":
+					return "pull_request", true
+				case "GITHUB_EVENT_PATH":
+					return eventPath, true
+				default:
+					return "", false
+				}
+			},
+		},
+	}
+
+	eventName, gotEventPath, base, head, err := runner.resolveGitRange()
 	if err != nil {
 		t.Fatalf("resolveGitRange returned error: %v", err)
 	}
@@ -159,7 +166,15 @@ func TestResolveGenerateTargetsDiscoversCharts(t *testing.T) {
 		}
 	}
 
-	targets, err := resolveGenerateTargets(repoRoot, nil, os.Stat, filepath.WalkDir)
+	runner := actionRunner{
+		repoRoot: repoRoot,
+		deps: Dependencies{
+			Stat:    os.Stat,
+			WalkDir: filepath.WalkDir,
+		},
+	}
+
+	targets, err := runner.resolveGenerateTargets()
 	if err != nil {
 		t.Fatalf("resolveGenerateTargets returned error: %v", err)
 	}
@@ -184,7 +199,16 @@ func TestResolveGenerateTargetsSupportsGlobs(t *testing.T) {
 		}
 	}
 
-	targets, err := resolveGenerateTargets(repoRoot, []string{"charts/*"}, os.Stat, filepath.WalkDir)
+	runner := actionRunner{
+		repoRoot:        repoRoot,
+		configuredPaths: []string{"charts/*"},
+		deps: Dependencies{
+			Stat:    os.Stat,
+			WalkDir: filepath.WalkDir,
+		},
+	}
+
+	targets, err := runner.resolveGenerateTargets()
 	if err != nil {
 		t.Fatalf("resolveGenerateTargets returned error: %v", err)
 	}
@@ -223,7 +247,16 @@ func TestResolveCheckTargetsExpandsDirectories(t *testing.T) {
 		}
 	}
 
-	targets, err := resolveCheckTargets(repoRoot, []string{"boms"}, os.Stat, filepath.WalkDir)
+	runner := actionRunner{
+		repoRoot:        repoRoot,
+		configuredPaths: []string{"boms"},
+		deps: Dependencies{
+			Stat:    os.Stat,
+			WalkDir: filepath.WalkDir,
+		},
+	}
+
+	targets, err := runner.resolveCheckTargets()
 	if err != nil {
 		t.Fatalf("resolveCheckTargets returned error: %v", err)
 	}
@@ -248,7 +281,15 @@ func TestResolveCheckTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 		}
 	}
 
-	targets, err := resolveCheckTargets(repoRoot, nil, os.Stat, filepath.WalkDir)
+	runner := actionRunner{
+		repoRoot: repoRoot,
+		deps: Dependencies{
+			Stat:    os.Stat,
+			WalkDir: filepath.WalkDir,
+		},
+	}
+
+	targets, err := runner.resolveCheckTargets()
 	if err != nil {
 		t.Fatalf("resolveCheckTargets returned error: %v", err)
 	}
@@ -282,14 +323,22 @@ func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 	}
 
 	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
-	runCLI := func(args []string, stdout io.Writer, stderr io.Writer) error {
-		if len(args) == 0 {
-			return fmt.Errorf("missing args")
-		}
-		return os.WriteFile(outputPath, []byte("after\n"), 0o600)
+	runner := actionRunner{
+		repoRoot: repoRoot,
+		cfg:      cfg,
+		stdout:   io.Discard,
+		stderr:   io.Discard,
+		deps: Dependencies{
+			RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
+				if len(args) == 0 {
+					return fmt.Errorf("missing args")
+				}
+				return os.WriteFile(outputPath, []byte("after\n"), 0o600)
+			},
+		},
 	}
 
-	processed, changedOutputs, changedTargets, err := runGenerateTargets(repoRoot, []string{"charts/api"}, cfg, io.Discard, io.Discard, runCLI)
+	processed, changedOutputs, changedTargets, err := runner.runGenerateTargets([]string{"charts/api"})
 	if err != nil {
 		t.Fatalf("runGenerateTargets returned error: %v", err)
 	}
@@ -320,11 +369,19 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 	}
 
 	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
-	runCLI := func(args []string, stdout io.Writer, stderr io.Writer) error {
-		return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
+	runner := actionRunner{
+		repoRoot: repoRoot,
+		cfg:      cfg,
+		stdout:   io.Discard,
+		stderr:   io.Discard,
+		deps: Dependencies{
+			RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
+				return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
+			},
+		},
 	}
 
-	processed, changedOutputs, changedTargets, err := runGenerateTargets(repoRoot, []string{"charts/api"}, cfg, io.Discard, io.Discard, runCLI)
+	processed, changedOutputs, changedTargets, err := runner.runGenerateTargets([]string{"charts/api"})
 	if err != nil {
 		t.Fatalf("runGenerateTargets returned error: %v", err)
 	}
