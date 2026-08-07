@@ -240,7 +240,7 @@ Credentials are stored in the Docker config used by `crane` and the Docker CLI, 
 
 ## GitHub Action
 
-This repository also ships a container-based GitHub Action defined by [action.yml](/Users/schrodit/dev/cs/helm-bom/action.yml) and built from [Dockerfile](/Users/schrodit/dev/cs/helm-bom/Dockerfile). The published Action pulls `ghcr.io/codesphere-cloud/helm-bom:latest`.
+This repository also ships a composite GitHub Action defined by [action.yml](/Users/schrodit/dev/cs/helm-bom/action.yml). The Action installs Go and Helm on the runner, builds `helm-bom-action` from the checked-in source, and runs it directly without a Docker workspace mount.
 
 The Action supports two modes:
 
@@ -254,7 +254,7 @@ jobs:
   bom:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -275,7 +275,7 @@ jobs:
   validate-boms:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -300,16 +300,3 @@ The Action writes these outputs:
 - `changed-output-paths`
 - `changed-target-paths`
 - `any-processed-changed`
-
-## Image Release Flow
-
-Two GitHub workflows manage the Action container image:
-
-- [.github/workflows/action-image.yml](/Users/schrodit/dev/cs/helm-bom/.github/workflows/action-image.yml) builds the image on pull requests and pushes to `main` without publishing it.
-- [.github/workflows/action-release.yml](/Users/schrodit/dev/cs/helm-bom/.github/workflows/action-release.yml) publishes the image to GHCR when a tag matching `v*` is pushed.
-
-The tag release workflow publishes:
-
-- the exact tag version
-- major/minor semver aliases
-- `latest`
