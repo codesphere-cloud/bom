@@ -20,7 +20,7 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 		t.Fatalf("write event payload: %v", err)
 	}
 
-	base, head, err := resolveGitRange(Config{}, os.ReadFile, func(key string) (string, bool) {
+	eventName, gotEventPath, base, head, err := resolveGitRange(Config{}, os.ReadFile, func(key string) (string, bool) {
 		switch key {
 		case "GITHUB_EVENT_NAME":
 			return "pull_request", true
@@ -32,6 +32,10 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("resolveGitRange returned error: %v", err)
+	}
+
+	if eventName != "pull_request" || gotEventPath != eventPath {
+		t.Fatalf("unexpected event metadata: %q %q", eventName, gotEventPath)
 	}
 
 	if base != "base123" || head != "head456" {
@@ -245,6 +249,23 @@ func TestRenderSummary(t *testing.T) {
 	} {
 		if !strings.Contains(summary, fragment) {
 			t.Fatalf("summary missing %q:\n%s", fragment, summary)
+		}
+	}
+}
+
+func TestLogList(t *testing.T) {
+	var stderr strings.Builder
+
+	logList(&stderr, "changed paths", []string{"charts/api/Chart.yaml", "charts/api/values.yaml"})
+
+	got := stderr.String()
+	for _, fragment := range []string{
+		"helm-bom-action: changed paths (2):",
+		"charts/api/Chart.yaml",
+		"charts/api/values.yaml",
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("log output missing %q:\n%s", fragment, got)
 		}
 	}
 }

@@ -155,6 +155,10 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 
 	logf(stderr, "starting helm-bom action in %q mode", cfg.Mode)
 	logf(stderr, "repository root: %s", repoRoot)
+	logf(stderr, "config: changed-only=%t format=%q namespace=%q release-name=%q fail-on-no-matches=%t", cfg.ChangedOnly, cfg.Format, cfg.Namespace, cfg.ReleaseName, cfg.FailOnNoMatches)
+	logf(stderr, "raw paths input: %q", cfg.Paths)
+	configuredPaths := parseList(cfg.Paths)
+	logList(stderr, "parsed paths input", configuredPaths)
 
 	if err := maybeLoginRegistry(cfg, stdout, stderr, deps.RunCLI); err != nil {
 		return err
@@ -163,29 +167,34 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 	changedPaths := []string(nil)
 	if cfg.ChangedOnly {
 		logf(stderr, "resolving changed paths from GitHub event")
-		baseSHA, headSHA, rangeErr := resolveGitRange(cfg, deps.ReadFile, deps.LookupEnv)
+		eventName, eventPath, baseSHA, headSHA, rangeErr := resolveGitRange(cfg, deps.ReadFile, deps.LookupEnv)
 		if rangeErr != nil {
 			return rangeErr
 		}
+		logf(stderr, "resolved git range for event %q from payload %q: %s..%s", eventName, eventPath, baseSHA, headSHA)
 
 		changedPaths, err = deps.RunGitDiff(ctx, repoRoot, baseSHA, headSHA)
 		if err != nil {
 			return err
 		}
 		logf(stderr, "found %d changed path(s)", len(changedPaths))
+		logList(stderr, "changed paths", changedPaths)
 	}
 
-	targets, err := resolveTargets(cfg, repoRoot, changedPaths, deps.Stat, deps.WalkDir)
+	targets, err := resolveTargets(cfg, repoRoot, configuredPaths, changedPaths, deps.Stat, deps.WalkDir, stderr)
 	if err != nil {
 		return err
 	}
 	switch cfg.Mode {
 	case "generate":
 		logf(stderr, "found %d chart(s) to process", len(targets))
+		logList(stderr, "matched chart targets", targets)
 	case "check":
 		logf(stderr, "found %d BOM file(s) to process", len(targets))
+		logList(stderr, "matched BOM targets", targets)
 	default:
 		logf(stderr, "found %d target path(s) for mode %q", len(targets), cfg.Mode)
+		logList(stderr, "matched targets", targets)
 	}
 
 	result := Result{
@@ -245,36 +254,36 @@ func maybeLoginRegistry(cfg Config, stdout io.Writer, stderr io.Writer, runCLI f
 	return runCLI(args, stdout, stderr)
 }
 
-func resolveGitRange(cfg Config, readFile func(string) ([]byte, error), lookupEnv func(string) (string, bool)) (string, string, error) {
+func resolveGitRange(cfg Config, readFile func(string) ([]byte, error), lookupEnv func(string) (string, bool)) (string, string, string, string, error) {
 	eventName, _ := lookupEnv("GITHUB_EVENT_NAME")
 	eventPath, _ := lookupEnv("GITHUB_EVENT_PATH")
 	if strings.TrimSpace(eventPath) == "" {
-		return "", "", errors.New("changed-only requires GITHUB_EVENT_PATH")
+		return "", "", "", "", errors.New("changed-only requires GITHUB_EVENT_PATH")
 	}
 
 	content, err := readFile(eventPath)
 	if err != nil {
-		return "", "", fmt.Errorf("read GitHub event payload: %w", err)
+		return "", "", "", "", fmt.Errorf("read GitHub event payload: %w", err)
 	}
 
 	var payload githubEvent
 	if err := json.Unmarshal(content, &payload); err != nil {
-		return "", "", fmt.Errorf("decode GitHub event payload: %w", err)
+		return "", "", "", "", fmt.Errorf("decode GitHub event payload: %w", err)
 	}
 
 	switch eventName {
 	case "pull_request", "pull_request_target":
 		if payload.PullRequest.Base.SHA == "" || payload.PullRequest.Head.SHA == "" {
-			return "", "", errors.New("pull_request event payload is missing base/head SHAs")
+			return "", "", "", "", errors.New("pull_request event payload is missing base/head SHAs")
 		}
-		return payload.PullRequest.Base.SHA, payload.PullRequest.Head.SHA, nil
+		return eventName, eventPath, payload.PullRequest.Base.SHA, payload.PullRequest.Head.SHA, nil
 	case "push":
 		if payload.Before == "" || payload.After == "" {
-			return "", "", errors.New("push event payload is missing before/after SHAs")
+			return "", "", "", "", errors.New("push event payload is missing before/after SHAs")
 		}
-		return payload.Before, payload.After, nil
+		return eventName, eventPath, payload.Before, payload.After, nil
 	default:
-		return "", "", fmt.Errorf("changed-only is not supported for GitHub event %q", eventName)
+		return "", "", "", "", fmt.Errorf("changed-only is not supported for GitHub event %q", eventName)
 	}
 }
 
@@ -291,20 +300,30 @@ type githubEvent struct {
 	} `json:"pull_request"`
 }
 
-func resolveTargets(cfg Config, repoRoot string, changedPaths []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
+func resolveTargets(cfg Config, repoRoot string, patterns []string, changedPaths []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error, stderr io.Writer) ([]string, error) {
 	switch cfg.Mode {
 	case "generate":
-		targets, err := resolveGenerateTargets(repoRoot, parseList(cfg.Paths), stat, walkDir)
+		targets, err := resolveGenerateTargets(repoRoot, patterns, stat, walkDir)
 		if err != nil {
 			return nil, err
 		}
-		return filterGenerateTargetsByChangedPaths(targets, changedPaths), nil
+		logList(stderr, "generate targets before changed-path filtering", targets)
+		filtered := filterGenerateTargetsByChangedPaths(targets, changedPaths)
+		if len(changedPaths) > 0 && len(filtered) == 0 && len(targets) > 0 {
+			logf(stderr, "changed-path filtering removed all generate targets")
+		}
+		return filtered, nil
 	case "check":
-		targets, err := resolveCheckTargets(repoRoot, parseList(cfg.Paths), stat, walkDir)
+		targets, err := resolveCheckTargets(repoRoot, patterns, stat, walkDir)
 		if err != nil {
 			return nil, err
 		}
-		return filterCheckTargetsByChangedPaths(targets, changedPaths), nil
+		logList(stderr, "check targets before changed-path filtering", targets)
+		filtered := filterCheckTargetsByChangedPaths(targets, changedPaths)
+		if len(changedPaths) > 0 && len(filtered) == 0 && len(targets) > 0 {
+			logf(stderr, "changed-path filtering removed all check targets")
+		}
+		return filtered, nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", cfg.Mode)
 	}
@@ -312,6 +331,7 @@ func resolveTargets(cfg Config, repoRoot string, changedPaths []string, stat fun
 
 func resolveGenerateTargets(repoRoot string, patterns []string, stat func(string) (fs.FileInfo, error), walkDir func(string, fs.WalkDirFunc) error) ([]string, error) {
 	if len(patterns) == 0 {
+		// No explicit paths means scan the repository for charts.
 		return discoverChartDirs(repoRoot, walkDir)
 	}
 
@@ -636,6 +656,26 @@ func logf(w io.Writer, format string, args ...any) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "helm-bom-action: "+format+"\n", args...)
+}
+
+func logList(w io.Writer, label string, values []string) {
+	if w == nil {
+		return
+	}
+	if len(values) == 0 {
+		logf(w, "%s: <none>", label)
+		return
+	}
+
+	const maxItems = 20
+	display := values
+	if len(display) > maxItems {
+		display = display[:maxItems]
+	}
+	logf(w, "%s (%d): %s", label, len(values), strings.Join(display, ", "))
+	if len(values) > maxItems {
+		logf(w, "%s: ... %d more", label, len(values)-maxItems)
+	}
 }
 
 func appendKeyValueOutput(envName string, name string, value string) error {
