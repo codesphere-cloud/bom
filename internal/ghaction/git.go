@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"

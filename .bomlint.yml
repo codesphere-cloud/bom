@@ -1,0 +1,5 @@
+excludePaths: []
+allowedRegistries:
+  - docker.io
+  - ghcr.io
+  - quay.io

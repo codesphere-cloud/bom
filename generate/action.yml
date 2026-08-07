@@ -1,4 +1,4 @@
-name: helm-bom generate
+name: bom generate
 description: Generate Helm chart BOMs inside GitHub Actions.
 inputs:
   include-paths:
@@ -14,7 +14,7 @@ inputs:
     required: false
     default: "false"
   debug:
-    description: Enable debug logging and pass --debug through to helm-bom generate.
+    description: Enable debug logging and pass --debug through to bom generate.
     required: false
     default: "false"
   format:
@@ -62,7 +62,7 @@ runs:
     - uses: azure/setup-helm@v5
 
     - id: resolve-binary
-      name: Resolve helm-bom action binary
+      name: Resolve bom action binary
       shell: bash
       env:
         RUNNER_OS_NAME: ${{ runner.os }}
@@ -86,7 +86,7 @@ runs:
             ;;
         esac
 
-        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/helm-bom-action"
+        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/bom-action"
         if [ ! -f "$binary_path" ]; then
           echo "missing prebuilt action binary: $binary_path" >&2
           exit 1
@@ -96,7 +96,7 @@ runs:
         echo "binary-path=$binary_path" >> "$GITHUB_OUTPUT"
 
     - id: run
-      name: Run helm-bom generate action
+      name: Run bom generate action
       shell: bash
       env:
         INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}

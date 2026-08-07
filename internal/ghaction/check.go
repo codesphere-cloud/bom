@@ -4,17 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
 func (r checkRunner) run() error {
 	r.logStartup()
-
-	if err := r.loginRegistry(); err != nil {
-		return err
-	}
 
 	changedPaths, err := r.resolveChangedPaths(r.cfg.ChangedOnly)
 	if err != nil {
@@ -61,28 +56,6 @@ func (r checkRunner) logStartup() {
 	logging.LogList(r.logger, "parsed include-paths input", r.configuredPaths)
 	r.logger.Infof("raw exclude-paths input: %q", r.cfg.ExcludePaths)
 	logging.LogList(r.logger, "parsed exclude-paths input", r.excludedPaths)
-}
-
-func (r checkRunner) loginRegistry() error {
-	if strings.TrimSpace(r.cfg.RegistryServer) == "" {
-		return nil
-	}
-	r.logger.Infof("logging in to registry %s", r.cfg.RegistryServer)
-
-	args := []string{
-		"registry",
-		"login",
-		r.cfg.RegistryServer,
-		"--username",
-		r.cfg.RegistryUsername,
-		"--password",
-		r.cfg.RegistryPassword,
-	}
-	if r.cfg.Debug {
-		args = append(args, "--debug")
-	}
-
-	return r.deps.RunCLI(args, r.stdout, r.logger.Writer())
 }
 
 func (r checkRunner) resolveTargets() ([]string, error) {

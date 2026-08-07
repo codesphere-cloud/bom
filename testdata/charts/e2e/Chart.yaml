@@ -1,6 +1,6 @@
 apiVersion: v2
 name: e2e-chart
-description: Helm chart fixture for helm-bom integration tests
+description: Helm chart fixture for bom integration tests
 type: application
 version: 0.1.0
 appVersion: "1.0"

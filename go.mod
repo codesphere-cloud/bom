@@ -1,4 +1,4 @@
-module github.com/codesphere-cloud/helm-bom
+module github.com/codesphere-cloud/bom
 
 go 1.26.5
 

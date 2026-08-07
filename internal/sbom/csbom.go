@@ -1,6 +1,6 @@
 package sbom
 
-import intcsbom "github.com/codesphere-cloud/helm-bom/internal/csbom"
+import intcsbom "github.com/codesphere-cloud/bom/internal/csbom"
 
 func csbomPayload(document Document) intcsbom.Config {
 	return intcsbom.Config{

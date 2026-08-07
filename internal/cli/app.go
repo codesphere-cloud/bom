@@ -5,11 +5,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
-	"github.com/codesphere-cloud/helm-bom/internal/helm"
-	"github.com/codesphere-cloud/helm-bom/internal/images"
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
-	"github.com/codesphere-cloud/helm-bom/internal/sbom"
+	"github.com/codesphere-cloud/bom/internal/bomlint"
+	"github.com/codesphere-cloud/bom/internal/bomrc"
+	"github.com/codesphere-cloud/bom/internal/helm"
+	"github.com/codesphere-cloud/bom/internal/images"
+	"github.com/codesphere-cloud/bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/sbom"
 	cranecmd "github.com/google/go-containerregistry/cmd/crane/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -55,18 +56,18 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var cfg config
 
 	cmd := &cobra.Command{
-		Use:   "helm-bom [chart]",
+		Use:   "bom [chart]",
 		Short: "Generate and validate SBOMs for OCI images referenced by Helm charts",
-		Long: "helm-bom renders a Helm chart with helm template, extracts OCI image references " +
+		Long: "bom renders a Helm chart with helm template, extracts OCI image references " +
 			"from supported Kubernetes workload resources, writes the result in either SPDX JSON " +
 			"or the internal csbom/csbom-v2 JSON/YAML formats, and can validate a generated BOM against upstream registries.",
 		Example: "" +
-			"  helm-bom ./chart\n" +
-			"  helm-bom generate ./chart --values values.yaml --set image.tag=1.2.3\n" +
-			"  helm-bom generate ./chart --format csbom-json --output bom.json\n" +
-			"  helm-bom generate ./chart --format csbom-v2-yaml --output bom.yaml\n" +
-			"  helm-bom check bom.json\n" +
-			"  helm-bom generate ./chart --release-name my-release --namespace production",
+			"  bom ./chart\n" +
+			"  bom generate ./chart --values values.yaml --set image.tag=1.2.3\n" +
+			"  bom generate ./chart --format csbom-json --output bom.json\n" +
+			"  bom generate ./chart --format csbom-v2-yaml --output bom.yaml\n" +
+			"  bom check bom.json\n" +
+			"  bom generate ./chart --release-name my-release --namespace production",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -249,7 +250,7 @@ func runGenerate(stdout io.Writer, logger logging.Logger, cfg config) error {
 	document := sbom.Document{
 		Metadata: sbom.Metadata{
 			Tool: sbom.ToolMetadata{
-				Name:    "helm-bom",
+				Name:    "bom",
 				Version: version,
 			},
 			Source: sbom.SourceMetadata{
@@ -297,7 +298,7 @@ func prependBOMGenerationValuesFile(valuesFiles *[]string, bomGenerationValues m
 		return nil, fmt.Errorf("marshal .bomrc bomGenerationValues: %w", err)
 	}
 
-	file, err := os.CreateTemp("", "helm-bom-generation-values-*.yaml")
+	file, err := os.CreateTemp("", "bom-generation-values-*.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("create bom generation values file: %w", err)
 	}
@@ -325,6 +326,14 @@ func runCheck(stdout io.Writer, logger logging.Logger, cfg checkConfig) error {
 }
 
 func runCheckWithValidator(stdout io.Writer, logger logging.Logger, cfg checkConfig, validator func([]images.ImageRef) error) error {
+	lintConfig, configRoot, foundConfig, err := bomlint.Find(cfg.bomPath)
+	if err != nil {
+		return err
+	}
+	if foundConfig {
+		logger.Debugf("loaded %s from %s", bomlint.FileName, configRoot)
+	}
+
 	file, err := os.Open(cfg.bomPath)
 	if err != nil {
 		return fmt.Errorf("open bom file: %w", err)
@@ -338,13 +347,25 @@ func runCheckWithValidator(stdout io.Writer, logger logging.Logger, cfg checkCon
 		return err
 	}
 
-	refs := sbom.ImageRefs(document)
+	refs := sbom.OCIRefs(document)
+	if err := images.ValidateAllowedRegistries(refs, lintConfig.AllowedRegistries); err != nil {
+		return err
+	}
 	if err := validator(refs); err != nil {
 		return err
 	}
 
-	logger.Infof("validated %d image reference(s)", len(refs))
-	_, err = fmt.Fprintf(stdout, "validated %d image reference(s)\n", len(refs))
+	imageCount := 0
+	chartCount := 0
+	for _, component := range document.Components {
+		if component.Type == sbom.ComponentTypeHelmChart {
+			chartCount++
+		} else {
+			imageCount++
+		}
+	}
+	logger.Infof("validated %d image reference(s) and %d Helm chart reference(s)", imageCount, chartCount)
+	_, err = fmt.Fprintf(stdout, "validated %d image reference(s) and %d Helm chart reference(s)\n", imageCount, chartCount)
 	return err
 }
 
@@ -357,7 +378,7 @@ func runRegistryLogin(stdin io.Reader, stdout io.Writer, logger logging.Logger, 
 		defer restore()
 	}
 
-	cmd := cranecmd.NewCmdAuthLogin("helm-bom registry")
+	cmd := cranecmd.NewCmdAuthLogin("bom registry")
 	cmd.SetOut(stdout)
 	cmd.SetErr(logger.Writer())
 	cmd.SetIn(stdin)
@@ -379,7 +400,7 @@ func prepareCraneLoginStdin(stdin io.Reader, passwordStdin bool) (func(), error)
 		return nil, nil
 	}
 
-	file, err := os.CreateTemp("", "helm-bom-registry-login-*")
+	file, err := os.CreateTemp("", "bom-registry-login-*")
 	if err != nil {
 		return nil, err
 	}

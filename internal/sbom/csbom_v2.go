@@ -1,6 +1,6 @@
 package sbom
 
-import intcsbomv2 "github.com/codesphere-cloud/helm-bom/internal/csbom/v2"
+import intcsbomv2 "github.com/codesphere-cloud/bom/internal/csbom/v2"
 
 const csbomV2Version = "2"
 

@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 GOLANGCI_LINT_CACHE := $(CURDIR)/.tmp/golangci-lint-cache
 GOCACHE := $(CURDIR)/.tmp/go-build
-LINT_PACKAGES := ./cmd/helm-bom ./internal/cli ./internal/helm ./internal/images ./internal/sbom ./test/e2e
+LINT_PACKAGES := ./cmd/bom ./internal/cli ./internal/helm ./internal/images ./internal/sbom ./test/e2e
 
 .PHONY: help check-tools build test test-e2e fmt fmt-check lint dist clean
 
@@ -12,17 +12,17 @@ check-tools: ## Verify required external tools are installed
 	@command -v helm >/dev/null 2>&1 || { echo "missing required tool: helm"; exit 1; }
 	@helm version >/dev/null
 
-build: check-tools ## Build the helm-bom binary
-	go build -o bin/helm-bom ./cmd/helm-bom
+build: check-tools ## Build the bom binary
+	go build -o bin/bom ./cmd/bom
 
-build-linux: check-tools ## Build the helm-bom binary
-	GOOS=linux GOARCH=amd64 go build -o bin/helm-bom ./cmd/helm-bom
+build-linux: check-tools ## Build the bom binary
+	GOOS=linux GOARCH=amd64 go build -o bin/bom ./cmd/bom
 
-build-action: check-tools ## Build the helm-bom binary
-	go build -o bin/helm-bom-action ./cmd/helm-bom-action
+build-action: check-tools ## Build the bom binary
+	go build -o bin/bom-action ./cmd/bom-action
 
-build-action-linux: check-tools ## Build the helm-bom binary
-	GOOS=linux GOARCH=amd64 go build -o bin/helm-bom-action ./cmd/helm-bom-action
+build-action-linux: check-tools ## Build the bom binary
+	GOOS=linux GOARCH=amd64 go build -o bin/bom-action ./cmd/bom-action
 
 dist: ## Build release binaries for the default OS/arch matrix into dist/
 	./scripts/build-dist.sh
@@ -31,7 +31,7 @@ test: check-tools ## Run all Go tests
 	go test ./...
 
 test-e2e: check-tools ## Run only the end-to-end integration test
-	go test ./test/e2e -run TestHelmBOMExtractsImagesFromChart
+	go test ./test/e2e -run TestBOMExtractsImagesFromChart
 
 fmt: ## Format Go code
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')

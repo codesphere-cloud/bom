@@ -71,6 +71,13 @@ jobs:
       - name: Verify Generated BOM
         run: test -f testdata/charts/e2e/bom.json
 
+      - name: Run Registry Login Via Local Registry Login Action
+        uses: ./registry-login
+        with:
+          registry-server: registry.example.com
+          registry-username: smoke-test
+          registry-password: smoke-test
+
       - name: Run Check Mode Via Local Check Action
         uses: ./check
         with:

@@ -1,6 +1,6 @@
-# helm-bom
+# bom
 
-`helm-bom` renders Helm charts, extracts OCI image references from supported Kubernetes workload resources, writes BOM output in SPDX JSON or internal `csbom` / `csbom-v2` formats, and can validate referenced images against upstream registries.
+`bom` renders Helm charts, extracts OCI image references from supported Kubernetes workload resources, writes BOM output in SPDX JSON or internal `csbom` / `csbom-v2` formats, and can validate referenced images against upstream registries.
 
 This repository primarily ships GitHub Actions for CI usage, plus the CLI those Actions wrap.
 
@@ -14,14 +14,15 @@ Choose the section that matches how you use this repository:
 
 ## Users Of The GitHub Action
 
-This repository ships two composite Actions:
+This repository ships three composite Actions:
 
-- [generate/action.yml](/Users/schrodit/dev/cs/helm-bom/generate/action.yml) generates BOM files for Helm charts
-- [check/action.yml](/Users/schrodit/dev/cs/helm-bom/check/action.yml) validates BOM files against upstream registries
+- [generate/action.yml](/Users/schrodit/dev/cs/bom/generate/action.yml) generates BOM files for Helm charts
+- [registry-login/action.yml](/Users/schrodit/dev/cs/bom/registry-login/action.yml) authenticates registry access for subsequent checks
+- [check/action.yml](/Users/schrodit/dev/cs/bom/check/action.yml) validates BOM files against upstream registries
 
-Both Actions:
+All Actions:
 
-- run the prebuilt `dist/linux-*/helm-bom-action` binary directly on the runner
+- run a prebuilt binary from `dist/linux-*` directly on the runner
 - support Linux runners only
 
 ### Generate BOMs In CI
@@ -35,7 +36,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom/generate@main
+      - uses: codesphere-cloud/bom/generate@main
         with:
           include-paths: |
             charts/*
@@ -97,7 +98,7 @@ Supported Kubernetes workload primitives:
 
 Image reference parsing uses `github.com/distribution/reference`.
 
-If a chart root contains `.bomrc.yml` or `.bomrc.yaml`, `helm-bom` loads it automatically during generation.
+If a chart root contains `.bomrc.yml` or `.bomrc.yaml`, `bom` loads it automatically during generation.
 
 Example:
 
@@ -176,12 +177,12 @@ Example `spdx-json` output:
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "helm-bom chart",
-  "documentNamespace": "https://codesphere-cloud.github.io/helm-bom/spdx/...",
+  "name": "bom chart",
+  "documentNamespace": "https://codesphere-cloud.github.io/bom/spdx/...",
   "creationInfo": {
     "created": "2026-07-29T00:00:00Z",
     "creators": [
-      "Tool: helm-bom-dev"
+      "Tool: bom-dev"
     ]
   },
   "packages": [
@@ -214,17 +215,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom/check@main
+      - uses: codesphere-cloud/bom/registry-login@main
+        with:
+          registry-server: ghcr.io
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: codesphere-cloud/bom/check@main
         with:
           include-paths: |
             charts/*/bom.json
           exclude-paths: |
             charts/legacy/*
           changed-only: true
-          registry-server: ghcr.io
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+Registry-login inputs:
+
+- `registry-server`: registry host to authenticate with, such as `ghcr.io`
+- `registry-username`: registry username
+- `registry-password`: registry password or access token; the Action passes it to the CLI through standard input rather than a command-line argument
+- `debug`: enable extra login logs
 
 Check-specific inputs:
 
@@ -232,9 +243,6 @@ Check-specific inputs:
 - `exclude-paths`: newline-separated BOM selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only validate BOM files that were changed in the current push or pull request
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
-- `registry-server`: optional registry server to log in to before validation
-- `registry-username`: registry username used with `registry-server`
-- `registry-password`: registry password used with `registry-server`
 - `fail-on-no-matches`: fail instead of succeeding when no BOM paths remain after filtering
 
 When `changed-only: true` is set, the Action only validates BOM files that were themselves changed in the current push or pull request.
@@ -252,19 +260,19 @@ Use the CLI for local debugging, reproducing GitHub Action behavior, or developi
 ### Run The CLI
 
 ```bash
-go run ./cmd/helm-bom ./chart \
+go run ./cmd/bom ./chart \
   --values values.yaml \
   --set image.tag=1.2.3
 ```
 
-The top-level `helm-bom ./chart ...` invocation is a compatibility alias for `helm-bom generate ./chart ...`.
+The top-level `bom ./chart ...` invocation is a compatibility alias for `bom generate ./chart ...`.
 
 Explicit subcommands:
 
 ```bash
-go run ./cmd/helm-bom generate ./chart --output bom.json
-go run ./cmd/helm-bom check bom.json
-printf '%s\n' "$TOKEN" | go run ./cmd/helm-bom registry login ghcr.io -u "$USER" --password-stdin
+go run ./cmd/bom generate ./chart --output bom.json
+go run ./cmd/bom check bom.json
+printf '%s\n' "$TOKEN" | go run ./cmd/bom registry login ghcr.io -u "$USER" --password-stdin
 ```
 
 The CLI is built with `cobra`, so `--help`, `--version`, `completion`, and subcommand help are available.
@@ -274,7 +282,7 @@ If `--release-name` is omitted, both the Helm release name and the SPDX document
 ### Useful Flags For Local Debugging
 
 ```bash
-go run ./cmd/helm-bom generate ./chart \
+go run ./cmd/bom generate ./chart \
   --format csbom-v2-json \
   --namespace default \
   --values values.yaml \
@@ -301,7 +309,7 @@ The default CLI output format is `spdx-json`.
 ### Validate A BOM Locally
 
 ```bash
-go run ./cmd/helm-bom check bom.json
+go run ./cmd/bom check bom.json
 ```
 
 Supported input BOM formats for `check`:
@@ -314,13 +322,33 @@ Supported input BOM formats for `check`:
 - `csbom-v2-yaml`
 - `csbom-v2`
 
-For each image reference found in the BOM, `check` validates that the upstream registry serves a manifest for that reference.
+For each container image and Helm chart OCI reference found in the BOM, `check` validates that the upstream registry serves a manifest for that reference.
+
+### Configure BOM Checks
+
+Add a `.bomlint.yml` file at the repository root to share checker settings between local CLI runs and the check Action:
+
+```yaml
+excludePaths:
+  - charts/legacy
+  - charts/experimental/*/bom.yaml
+allowedRegistries:
+  - docker.io
+  - ghcr.io
+  - registry.example.com:5000
+```
+
+- `excludePaths` uses the same exact-path, directory-prefix, and glob matching as the check Action's `exclude-paths` input. Configured and Action-supplied exclusions are combined.
+- `allowedRegistries` is an exact allowlist of registry hosts, with optional ports. Do not include a URL scheme or repository path. Unqualified image references such as `busybox:latest` resolve to `docker.io`.
+- If `allowedRegistries` is omitted or empty, registry allowlist enforcement is disabled for backward compatibility.
+
+The CLI searches for `.bomlint.yml` from the BOM file's directory upward. Registry restrictions apply to every container image and Helm chart OCI reference in supported BOMs. The checker validates the existence of both kinds of reference in their upstream registries.
 
 If a registry requires authentication first:
 
 ```bash
-printf '%s\n' "$TOKEN" | go run ./cmd/helm-bom registry login ghcr.io -u "$USER" --password-stdin
-go run ./cmd/helm-bom check bom.json
+printf '%s\n' "$TOKEN" | go run ./cmd/bom registry login ghcr.io -u "$USER" --password-stdin
+go run ./cmd/bom check bom.json
 ```
 
 Credentials are stored in the Docker config used by `crane` and the Docker CLI, honoring `DOCKER_CONFIG` when it is set.
@@ -348,18 +376,18 @@ make dist
 
 ### Repository Layout
 
-- [cmd/helm-bom](/Users/schrodit/dev/cs/helm-bom/cmd/helm-bom): CLI entrypoint
-- [cmd/helm-bom-action](/Users/schrodit/dev/cs/helm-bom/cmd/helm-bom-action): GitHub Action wrapper entrypoint
-- [internal/helm](/Users/schrodit/dev/cs/helm-bom/internal/helm): Helm templating
-- [internal/images](/Users/schrodit/dev/cs/helm-bom/internal/images): image extraction, configured images, validation
-- [internal/sbom](/Users/schrodit/dev/cs/helm-bom/internal/sbom): SPDX and `csbom` / `csbom-v2` formatting and parsing
-- [internal/ghaction](/Users/schrodit/dev/cs/helm-bom/internal/ghaction): shared action filtering, path resolution, and output handling
-- [generate/action.yml](/Users/schrodit/dev/cs/helm-bom/generate/action.yml) and [check/action.yml](/Users/schrodit/dev/cs/helm-bom/check/action.yml): composite Action entrypoints
-- [scripts/build-dist.sh](/Users/schrodit/dev/cs/helm-bom/scripts/build-dist.sh): dist artifact builder
+- [cmd/bom](/Users/schrodit/dev/cs/bom/cmd/bom): CLI entrypoint
+- [cmd/bom-action](/Users/schrodit/dev/cs/bom/cmd/bom-action): GitHub Action wrapper entrypoint
+- [internal/helm](/Users/schrodit/dev/cs/bom/internal/helm): Helm templating
+- [internal/images](/Users/schrodit/dev/cs/bom/internal/images): image extraction, configured images, validation
+- [internal/sbom](/Users/schrodit/dev/cs/bom/internal/sbom): SPDX and `csbom` / `csbom-v2` formatting and parsing
+- [internal/ghaction](/Users/schrodit/dev/cs/bom/internal/ghaction): shared action filtering, path resolution, and output handling
+- [generate/action.yml](/Users/schrodit/dev/cs/bom/generate/action.yml) and [check/action.yml](/Users/schrodit/dev/cs/bom/check/action.yml): composite Action entrypoints
+- [scripts/build-dist.sh](/Users/schrodit/dev/cs/bom/scripts/build-dist.sh): dist artifact builder
 
 ### Action Development
 
-The composite Actions execute the prebuilt `helm-bom-action` binaries from `dist/`, so action changes usually need updated dist artifacts:
+The composite Actions execute the prebuilt `bom-action` binaries from `dist/`, so action changes usually need updated dist artifacts:
 
 ```bash
 make build-action
@@ -368,10 +396,10 @@ make dist
 
 The current dist matrix in this repository is:
 
-- `dist/linux-amd64/helm-bom`
-- `dist/linux-amd64/helm-bom-action`
-- `dist/linux-arm64/helm-bom`
-- `dist/linux-arm64/helm-bom-action`
+- `dist/linux-amd64/bom`
+- `dist/linux-amd64/bom-action`
+- `dist/linux-arm64/bom`
+- `dist/linux-arm64/bom-action`
 
 ### Output Formats
 
@@ -386,4 +414,4 @@ Available output formats:
 - `csbom-v2`
 - `spdx`
 
-SPDX generation uses `github.com/spdx/tools-golang`. Registry validation uses `github.com/google/go-containerregistry/pkg/crane`. The internal BOM formats are defined in [internal/csbom/bom.go](/Users/schrodit/dev/cs/helm-bom/internal/csbom/bom.go) and [internal/csbom/v2/bom.go](/Users/schrodit/dev/cs/helm-bom/internal/csbom/v2/bom.go).
+SPDX generation uses `github.com/spdx/tools-golang`. Registry validation uses `github.com/google/go-containerregistry/pkg/crane`. The internal BOM formats are defined in [internal/csbom/bom.go](/Users/schrodit/dev/cs/bom/internal/csbom/bom.go) and [internal/csbom/v2/bom.go](/Users/schrodit/dev/cs/bom/internal/csbom/v2/bom.go).

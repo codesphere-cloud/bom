@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
 func (r generateRunner) run() error {

@@ -7,394 +7,394 @@ This project includes code licensed under the following terms:
 Module: dario.cat/mergo
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/dario.cat/mergo/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/dario.cat/mergo/LICENSE
  
 ----------
 Module: github.com/ProtonMail/go-crypto
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/ProtonMail/go-crypto/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/ProtonMail/go-crypto/LICENSE
  
 ----------
 Module: github.com/anchore/go-struct-converter
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/anchore/go-struct-converter/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/anchore/go-struct-converter/LICENSE
  
 ----------
 Module: github.com/cloudflare/circl
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/cloudflare/circl/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/cloudflare/circl/LICENSE
  
 ----------
-Module: github.com/codesphere-cloud/helm-bom
+Module: github.com/codesphere-cloud/bom
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/LICENSE
  
 ----------
 Module: github.com/cyphar/filepath-securejoin
 Version: Unknown
 License: MPL-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/cyphar/filepath-securejoin/COPYING.md
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/cyphar/filepath-securejoin/COPYING.md
  
 ----------
 Module: github.com/cyphar/filepath-securejoin
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/cyphar/filepath-securejoin/COPYING.md
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/cyphar/filepath-securejoin/COPYING.md
  
 ----------
 Module: github.com/distribution/reference
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/distribution/reference/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/distribution/reference/LICENSE
  
 ----------
 Module: github.com/docker/cli/cli/config
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/docker/cli/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/docker/cli/LICENSE
  
 ----------
 Module: github.com/docker/docker-credential-helpers
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/docker/docker-credential-helpers/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/docker/docker-credential-helpers/LICENSE
  
 ----------
 Module: github.com/emirpasic/gods
 Version: Unknown
 License: BSD-2-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/emirpasic/gods/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/emirpasic/gods/LICENSE
  
 ----------
 Module: github.com/emirpasic/gods
 Version: Unknown
 License: ISC
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/emirpasic/gods/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/emirpasic/gods/LICENSE
  
 ----------
 Module: github.com/fxamacker/cbor/v2
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/fxamacker/cbor/v2/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/fxamacker/cbor/v2/LICENSE
  
 ----------
 Module: github.com/go-git/gcfg
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/go-git/gcfg/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/go-git/gcfg/LICENSE
  
 ----------
 Module: github.com/go-git/go-billy/v5
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/go-git/go-billy/v5/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/go-git/go-billy/v5/LICENSE
  
 ----------
 Module: github.com/go-git/go-git/v5
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/go-git/go-git/v5/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/go-git/go-git/v5/LICENSE
  
 ----------
 Module: github.com/go-logr/logr
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/go-logr/logr/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/go-logr/logr/LICENSE
  
 ----------
 Module: github.com/golang/groupcache/lru
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/golang/groupcache/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/golang/groupcache/LICENSE
  
 ----------
 Module: github.com/google/go-cmp/cmp
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/google/go-cmp/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/google/go-cmp/LICENSE
  
 ----------
 Module: github.com/google/go-containerregistry
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/google/go-containerregistry/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/google/go-containerregistry/LICENSE
  
 ----------
 Module: github.com/jbenet/go-context/io
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/jbenet/go-context/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/jbenet/go-context/LICENSE
  
 ----------
 Module: github.com/json-iterator/go
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/json-iterator/go/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/json-iterator/go/LICENSE
  
 ----------
 Module: github.com/kevinburke/ssh_config
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/kevinburke/ssh_config/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/kevinburke/ssh_config/LICENSE
  
 ----------
 Module: github.com/klauspost/compress
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
  
 ----------
 Module: github.com/klauspost/compress
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
  
 ----------
 Module: github.com/klauspost/compress
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/compress/LICENSE
  
 ----------
 Module: github.com/klauspost/compress/internal/snapref
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/compress/internal/snapref/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/compress/internal/snapref/LICENSE
  
 ----------
 Module: github.com/klauspost/compress/zstd/internal/xxhash
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/compress/zstd/internal/xxhash/LICENSE.txt
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/compress/zstd/internal/xxhash/LICENSE.txt
  
 ----------
 Module: github.com/klauspost/cpuid/v2
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/klauspost/cpuid/v2/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/klauspost/cpuid/v2/LICENSE
  
 ----------
 Module: github.com/modern-go/concurrent
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/modern-go/concurrent/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/modern-go/concurrent/LICENSE
  
 ----------
 Module: github.com/modern-go/reflect2
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/modern-go/reflect2/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/modern-go/reflect2/LICENSE
  
 ----------
 Module: github.com/opencontainers/go-digest
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/opencontainers/go-digest/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/opencontainers/go-digest/LICENSE
  
 ----------
 Module: github.com/opencontainers/image-spec/specs-go
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/opencontainers/image-spec/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/opencontainers/image-spec/LICENSE
  
 ----------
 Module: github.com/pjbgf/sha1cd
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/pjbgf/sha1cd/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/pjbgf/sha1cd/LICENSE
  
 ----------
 Module: github.com/sergi/go-diff/diffmatchpatch
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/sergi/go-diff/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/sergi/go-diff/LICENSE
  
 ----------
 Module: github.com/sirupsen/logrus
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/sirupsen/logrus/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/sirupsen/logrus/LICENSE
  
 ----------
 Module: github.com/skeema/knownhosts
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/skeema/knownhosts/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/skeema/knownhosts/LICENSE
  
 ----------
 Module: github.com/spdx/tools-golang
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/spdx/tools-golang/LICENSE.code
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/spdx/tools-golang/LICENSE.code
  
 ----------
 Module: github.com/spdx/tools-golang
 Version: Unknown
 License: GPL-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/spdx/tools-golang/LICENSE.code
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/spdx/tools-golang/LICENSE.code
  
 ----------
 Module: github.com/spf13/cobra
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/spf13/cobra/LICENSE.txt
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/spf13/cobra/LICENSE.txt
  
 ----------
 Module: github.com/spf13/pflag
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/spf13/pflag/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/spf13/pflag/LICENSE
  
 ----------
 Module: github.com/x448/float16
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/x448/float16/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/x448/float16/LICENSE
  
 ----------
 Module: github.com/xanzy/ssh-agent
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/github.com/xanzy/ssh-agent/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/github.com/xanzy/ssh-agent/LICENSE
  
 ----------
 Module: go.yaml.in/yaml/v2
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/go.yaml.in/yaml/v2/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/go.yaml.in/yaml/v2/LICENSE
  
 ----------
 Module: golang.org/x/crypto
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/golang.org/x/crypto/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/golang.org/x/crypto/LICENSE
  
 ----------
 Module: golang.org/x/net
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/golang.org/x/net/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/golang.org/x/net/LICENSE
  
 ----------
 Module: golang.org/x/sync/errgroup
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/golang.org/x/sync/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/golang.org/x/sync/LICENSE
  
 ----------
 Module: golang.org/x/sys
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/golang.org/x/sys/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/golang.org/x/sys/LICENSE
  
 ----------
 Module: golang.org/x/text
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/golang.org/x/text/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/golang.org/x/text/LICENSE
  
 ----------
 Module: gopkg.in/inf.v0
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/gopkg.in/inf.v0/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/gopkg.in/inf.v0/LICENSE
  
 ----------
 Module: gopkg.in/warnings.v0
 Version: Unknown
 License: BSD-2-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/gopkg.in/warnings.v0/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/gopkg.in/warnings.v0/LICENSE
  
 ----------
 Module: gopkg.in/yaml.v3
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/gopkg.in/yaml.v3/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/gopkg.in/yaml.v3/LICENSE
  
 ----------
 Module: k8s.io/api
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/api/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/api/LICENSE
  
 ----------
 Module: k8s.io/apimachinery/pkg
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/apimachinery/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/apimachinery/LICENSE
  
 ----------
 Module: k8s.io/apimachinery/third_party/forked/golang/reflect
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/apimachinery/third_party/forked/golang/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/apimachinery/third_party/forked/golang/LICENSE
  
 ----------
 Module: k8s.io/klog/v2
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/klog/v2/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/klog/v2/LICENSE
  
 ----------
 Module: k8s.io/kube-openapi/pkg/util
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/kube-openapi/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/kube-openapi/LICENSE
  
 ----------
 Module: k8s.io/utils
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/utils/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/utils/LICENSE
  
 ----------
 Module: k8s.io/utils/internal/third_party/forked/golang/net
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/k8s.io/utils/internal/third_party/forked/golang/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/k8s.io/utils/internal/third_party/forked/golang/LICENSE
  
 ----------
 Module: sigs.k8s.io/json
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/json/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/json/LICENSE
  
 ----------
 Module: sigs.k8s.io/json
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/json/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/json/LICENSE
  
 ----------
 Module: sigs.k8s.io/randfill
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/randfill/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/randfill/LICENSE
  
 ----------
 Module: sigs.k8s.io/structured-merge-diff/v6/value
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/structured-merge-diff/v6/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/structured-merge-diff/v6/LICENSE
  
 ----------
 Module: sigs.k8s.io/yaml
 Version: Unknown
 License: MIT
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE
  
 ----------
 Module: sigs.k8s.io/yaml
 Version: Unknown
 License: Apache-2.0
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE
  
 ----------
 Module: sigs.k8s.io/yaml
 Version: Unknown
 License: BSD-3-Clause
-License URL: https://github.com/codesphere-cloud/helm-bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE
+License URL: https://github.com/codesphere-cloud/bom/blob/HEAD/vendor/sigs.k8s.io/yaml/LICENSE

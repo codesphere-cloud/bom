@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
+	"github.com/codesphere-cloud/bom/internal/bomrc"
 	yamlv3 "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	sigsyaml "sigs.k8s.io/yaml"

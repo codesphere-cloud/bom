@@ -6,9 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/codesphere-cloud/helm-bom/internal/cli"
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/bomlint"
+	"github.com/codesphere-cloud/bom/internal/cli"
+	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
 type BaseConfig struct {
@@ -29,10 +31,7 @@ type GenerateConfig struct {
 
 type CheckConfig struct {
 	BaseConfig
-	RegistryServer   string
-	RegistryUsername string
-	RegistryPassword string
-	ExcludePaths     string
+	ExcludePaths string
 }
 
 type Dependencies struct {
@@ -137,10 +136,16 @@ func RunCheckWithDependencies(ctx context.Context, cfg CheckConfig, stdout io.Wr
 	if err != nil {
 		return err
 	}
+	lintConfig, _, err := bomlint.Load(base.repoRoot)
+	if err != nil {
+		return err
+	}
+	excludedPaths := append([]string(nil), lintConfig.ExcludePaths...)
+	excludedPaths = append(excludedPaths, parseList(cfg.ExcludePaths)...)
 	return checkRunner{
 		baseRunner:    base,
 		cfg:           cfg,
-		excludedPaths: parseList(cfg.ExcludePaths),
+		excludedPaths: parseList(strings.Join(excludedPaths, "\n")),
 	}.run()
 }
 

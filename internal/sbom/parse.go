@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	intcsbom "github.com/codesphere-cloud/helm-bom/internal/csbom"
-	intcsbomv2 "github.com/codesphere-cloud/helm-bom/internal/csbom/v2"
-	"github.com/codesphere-cloud/helm-bom/internal/images"
+	intcsbom "github.com/codesphere-cloud/bom/internal/csbom"
+	intcsbomv2 "github.com/codesphere-cloud/bom/internal/csbom/v2"
+	"github.com/codesphere-cloud/bom/internal/images"
 	spdxjson "github.com/spdx/tools-golang/json"
 	"sigs.k8s.io/yaml"
 )
@@ -38,6 +38,10 @@ func Parse(r io.Reader) (Document, error) {
 func ImageRefs(document Document) []images.ImageRef {
 	refs := make([]images.ImageRef, 0, len(document.Components))
 	for _, component := range document.Components {
+		if component.Type == ComponentTypeHelmChart {
+			continue
+		}
+
 		ref, ok := images.ParseImageRef(component.Reference)
 		if !ok {
 			continue
@@ -46,6 +50,18 @@ func ImageRefs(document Document) []images.ImageRef {
 		refs = append(refs, ref)
 	}
 
+	return refs
+}
+
+func OCIRefs(document Document) []images.ImageRef {
+	refs := make([]images.ImageRef, 0, len(document.Components))
+	for _, component := range document.Components {
+		ref, ok := images.ParseImageRef(component.Reference)
+		if !ok {
+			continue
+		}
+		refs = append(refs, ref)
+	}
 	return refs
 }
 
@@ -67,7 +83,7 @@ func parseSPDXJSON(content []byte) (Document, error) {
 		}
 
 		components = append(components, Component{
-			Type:       "oci-image",
+			Type:       ComponentTypeOCIImage,
 			Repository: ref.Repository,
 			Reference:  ref.Reference,
 			Tag:        ref.Tag,
@@ -117,7 +133,24 @@ func parseCSBOM(content []byte) (Document, error) {
 			}
 
 			components = append(components, Component{
-				Type:       "oci-image",
+				Type:       ComponentTypeOCIImage,
+				Repository: ref.Repository,
+				Reference:  ref.Reference,
+				Tag:        ref.Tag,
+				Digest:     ref.Digest,
+			})
+		}
+
+		for _, file := range componentConfig.Files {
+			if strings.TrimSpace(file.OciRef) == "" {
+				continue
+			}
+			ref, ok := images.ParseImageRef(file.OciRef)
+			if !ok {
+				return Document{}, fmt.Errorf("invalid Helm chart OCI reference %q in csbom", file.OciRef)
+			}
+			components = append(components, Component{
+				Type:       ComponentTypeHelmChart,
 				Repository: ref.Repository,
 				Reference:  ref.Reference,
 				Tag:        ref.Tag,
@@ -131,7 +164,7 @@ func parseCSBOM(content []byte) (Document, error) {
 	})
 
 	if len(components) == 0 {
-		return Document{}, fmt.Errorf("csbom does not contain container images")
+		return Document{}, fmt.Errorf("csbom does not contain OCI images or Helm charts")
 	}
 
 	return Document{Components: components}, nil
@@ -143,11 +176,11 @@ func parseCSBOMV2(content []byte) (Document, error) {
 		return Document{}, err
 	}
 
-	if len(payload.ContainerImages) == 0 {
-		return Document{}, fmt.Errorf("csbom v2 does not contain container images")
+	if len(payload.ContainerImages) == 0 && len(payload.HelmCharts) == 0 {
+		return Document{}, fmt.Errorf("csbom v2 does not contain OCI images or Helm charts")
 	}
 
-	components := make([]Component, 0, len(payload.ContainerImages))
+	components := make([]Component, 0, len(payload.ContainerImages)+len(payload.HelmCharts))
 	for repository, image := range payload.ContainerImages {
 		ref, ok := images.ParseImageRef(image.Ref)
 		if !ok {
@@ -155,12 +188,26 @@ func parseCSBOMV2(content []byte) (Document, error) {
 		}
 
 		components = append(components, Component{
-			Type:       "oci-image",
+			Type:       ComponentTypeOCIImage,
 			Repository: repository,
 			Reference:  ref.Reference,
 			Tag:        ref.Tag,
 			Digest:     ref.Digest,
 			Evidence:   image.Sources,
+		})
+	}
+	for repository, chart := range payload.HelmCharts {
+		ref, ok := images.ParseImageRef(chart.Ref)
+		if !ok {
+			return Document{}, fmt.Errorf("invalid Helm chart OCI reference %q in csbom v2", chart.Ref)
+		}
+		components = append(components, Component{
+			Type:       ComponentTypeHelmChart,
+			Repository: repository,
+			Reference:  ref.Reference,
+			Tag:        ref.Tag,
+			Digest:     ref.Digest,
+			Evidence:   chart.Sources,
 		})
 	}
 

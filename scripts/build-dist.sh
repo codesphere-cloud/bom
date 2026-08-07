@@ -37,6 +37,6 @@ for target in $MATRIX; do
 		exit 1
 	fi
 
-	build_binary "$goos" "$goarch" helm-bom ./cmd/helm-bom
-	build_binary "$goos" "$goarch" helm-bom-action ./cmd/helm-bom-action
+	build_binary "$goos" "$goarch" bom ./cmd/bom
+	build_binary "$goos" "$goarch" bom-action ./cmd/bom-action
 done

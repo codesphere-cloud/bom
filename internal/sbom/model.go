@@ -3,13 +3,18 @@ package sbom
 import (
 	"time"
 
-	"github.com/codesphere-cloud/helm-bom/internal/images"
+	"github.com/codesphere-cloud/bom/internal/images"
 )
 
 type Document struct {
 	Metadata   Metadata    `json:"metadata"`
 	Components []Component `json:"components"`
 }
+
+const (
+	ComponentTypeOCIImage  = "oci-image"
+	ComponentTypeHelmChart = "helm-chart"
+)
 
 type Metadata struct {
 	GeneratedAt time.Time      `json:"generatedAt"`
@@ -46,7 +51,7 @@ func ComponentsFromImages(refs []images.ImageRef) []Component {
 	components := make([]Component, 0, len(refs))
 	for _, ref := range refs {
 		components = append(components, Component{
-			Type:       "oci-image",
+			Type:       ComponentTypeOCIImage,
 			Repository: ref.Repository,
 			Reference:  ref.Reference,
 			Tag:        ref.Tag,

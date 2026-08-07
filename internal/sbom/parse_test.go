@@ -101,6 +101,53 @@ func TestParseCSBOMV2JSON(t *testing.T) {
 	}
 }
 
+func TestParseCSBOMIncludesHelmChartOCIRefs(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+    files:
+      dependency:
+        ociRef: registry.example.com/charts/dependency:2.0.0
+`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	refs := OCIRefs(document)
+	if len(refs) != 2 {
+		t.Fatalf("expected image and Helm chart refs, got %#v", refs)
+	}
+	if document.Components[1].Type != ComponentTypeHelmChart {
+		t.Fatalf("expected Helm chart component, got %#v", document.Components[1])
+	}
+}
+
+func TestParseCSBOMV2IncludesHelmChartOCIRefs(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+version: "2"
+name: chart
+helmCharts:
+  dependency:
+    ref: registry.example.com/charts/dependency:2.0.0
+containerImages:
+  ghcr.io/example/api:
+    ref: ghcr.io/example/api:1.2.3
+`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	refs := OCIRefs(document)
+	if len(refs) != 2 {
+		t.Fatalf("expected image and Helm chart refs, got %#v", refs)
+	}
+	if len(ImageRefs(document)) != 1 {
+		t.Fatalf("expected only the container image from ImageRefs, got %#v", ImageRefs(document))
+	}
+}
+
 func TestParseSPDXJSON(t *testing.T) {
 	document, err := Parse(strings.NewReader(`{
   "spdxVersion": "SPDX-2.3",
@@ -110,7 +157,7 @@ func TestParseSPDXJSON(t *testing.T) {
   "documentNamespace": "https://example.com/spdx/test",
   "creationInfo": {
     "created": "2026-08-06T00:00:00Z",
-    "creators": ["Tool: helm-bom-dev"]
+    "creators": ["Tool: bom-dev"]
   },
   "packages": [
     {

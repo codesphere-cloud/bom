@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
+	"github.com/codesphere-cloud/bom/internal/bomrc"
 )
 
 func TestExtractConfigured(t *testing.T) {

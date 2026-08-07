@@ -67,7 +67,7 @@ func writeOutputs(result Result, writeOutput func(string, string) error) error {
 
 func renderSummary(mode string, result Result) string {
 	lines := []string{
-		fmt.Sprintf("### helm-bom action `%s`", mode),
+		fmt.Sprintf("### bom action `%s`", mode),
 		"",
 		fmt.Sprintf("- Changed paths: %d", len(result.ChangedPaths)),
 		fmt.Sprintf("- Matched paths: %d", len(result.MatchedPaths)),

@@ -94,7 +94,7 @@ func namespaceFor(document Document) string {
 		document.Metadata.GeneratedAt.Format("2006-01-02T15:04:05Z"),
 	}, "|")))
 
-	return "https://codesphere-cloud.github.io/helm-bom/spdx/" + hex.EncodeToString(hash[:])
+	return "https://codesphere-cloud.github.io/bom/spdx/" + hex.EncodeToString(hash[:])
 }
 
 func sourceComment(source SourceMetadata) string {

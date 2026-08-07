@@ -1,0 +1,70 @@
+name: bom registry login
+description: Authenticate bom registry checks with an OCI registry inside GitHub Actions.
+inputs:
+  registry-server:
+    description: Registry server to authenticate with, for example ghcr.io.
+    required: true
+  registry-username:
+    description: Registry username.
+    required: true
+  registry-password:
+    description: Registry password or access token.
+    required: true
+  debug:
+    description: Enable debug logging and pass --debug through to bom registry login.
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - id: resolve-binary
+      name: Resolve bom binary
+      shell: bash
+      env:
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+      run: |
+        case "$RUNNER_OS_NAME" in
+          Linux) goos=linux ;;
+          *)
+            echo "unsupported runner.os: $RUNNER_OS_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$RUNNER_ARCH_NAME" in
+          X64) goarch=amd64 ;;
+          ARM64) goarch=arm64 ;;
+          *)
+            echo "unsupported runner.arch: $RUNNER_ARCH_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/bom"
+        if [ ! -f "$binary_path" ]; then
+          echo "missing prebuilt action binary: $binary_path" >&2
+          exit 1
+        fi
+
+        chmod +x "$binary_path"
+        echo "binary-path=$binary_path" >> "$GITHUB_OUTPUT"
+
+    - name: Log in to registry
+      shell: bash
+      env:
+        INPUT_REGISTRY_SERVER: ${{ inputs.registry-server }}
+        INPUT_REGISTRY_USERNAME: ${{ inputs.registry-username }}
+        INPUT_REGISTRY_PASSWORD: ${{ inputs.registry-password }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+      run: |
+        args=(
+          registry login "$INPUT_REGISTRY_SERVER"
+          --username "$INPUT_REGISTRY_USERNAME"
+          --password-stdin
+        )
+        if [ "$INPUT_DEBUG" = "true" ]; then
+          args+=(--debug)
+        fi
+        printf '%s\n' "$INPUT_REGISTRY_PASSWORD" |
+          "${{ steps.resolve-binary.outputs.binary-path }}" "${args[@]}"

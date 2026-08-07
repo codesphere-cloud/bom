@@ -3,6 +3,8 @@ package ghaction
 import (
 	"io/fs"
 	"path/filepath"
+
+	"github.com/codesphere-cloud/bom/internal/bomlint"
 )
 
 func (r baseRunner) discoverChartDirs() ([]string, error) {
@@ -53,6 +55,9 @@ func (r baseRunner) discoverBOMPaths() ([]string, error) {
 			case ".git", ".github":
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if entry.Name() == bomlint.FileName {
 			return nil
 		}
 

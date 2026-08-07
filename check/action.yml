@@ -1,4 +1,4 @@
-name: helm-bom check
+name: bom check
 description: Validate generated BOM files against upstream registries inside GitHub Actions.
 inputs:
   include-paths:
@@ -14,21 +14,9 @@ inputs:
     required: false
     default: "false"
   debug:
-    description: Enable debug logging and pass --debug through to helm-bom check.
+    description: Enable debug logging and pass --debug through to bom check.
     required: false
     default: "false"
-  registry-server:
-    description: Optional registry server to log in to before running checks.
-    required: false
-    default: ""
-  registry-username:
-    description: Optional registry username used with registry-server.
-    required: false
-    default: ""
-  registry-password:
-    description: Optional registry password used with registry-server.
-    required: false
-    default: ""
   fail-on-no-matches:
     description: Fail instead of succeeding when no paths match the configured filters.
     required: false
@@ -47,7 +35,7 @@ runs:
   using: composite
   steps:
     - id: resolve-binary
-      name: Resolve helm-bom action binary
+      name: Resolve bom action binary
       shell: bash
       env:
         RUNNER_OS_NAME: ${{ runner.os }}
@@ -70,7 +58,7 @@ runs:
             ;;
         esac
 
-        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/helm-bom-action"
+        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/bom-action"
         if [ ! -f "$binary_path" ]; then
           echo "missing prebuilt action binary: $binary_path" >&2
           exit 1
@@ -80,16 +68,13 @@ runs:
         echo "binary-path=$binary_path" >> "$GITHUB_OUTPUT"
 
     - id: run
-      name: Run helm-bom check action
+      name: Run bom check action
       shell: bash
       env:
         INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}
         INPUT_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_DEBUG: ${{ inputs.debug }}
-        INPUT_REGISTRY_SERVER: ${{ inputs.registry-server }}
-        INPUT_REGISTRY_USERNAME: ${{ inputs.registry-username }}
-        INPUT_REGISTRY_PASSWORD: ${{ inputs.registry-password }}
         INPUT_FAIL_ON_NO_MATCHES: ${{ inputs.fail-on-no-matches }}
       run: |
         "${{ steps.resolve-binary.outputs.binary-path }}" \
@@ -98,7 +83,4 @@ runs:
           --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
-          --registry-server="$INPUT_REGISTRY_SERVER" \
-          --registry-username="$INPUT_REGISTRY_USERNAME" \
-          --registry-password="$INPUT_REGISTRY_PASSWORD" \
           --fail-on-no-matches="$INPUT_FAIL_ON_NO_MATCHES"

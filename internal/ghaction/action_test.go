@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesphere-cloud/helm-bom/internal/logging"
+	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -657,6 +657,51 @@ func TestCheckResolveTargetsAppliesExcludesWhenIncludePathsEmpty(t *testing.T) {
 	}
 }
 
+func TestRunCheckMergesBomlintExcludes(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "boms", "api.json"),
+		filepath.Join(repoRoot, "boms", "legacy", "worker.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir BOM directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write BOM: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".bomlint.yml"), []byte(`
+excludePaths:
+  - boms/legacy
+allowedRegistries:
+  - ghcr.io
+`), 0o600); err != nil {
+		t.Fatalf("write lint config: %v", err)
+	}
+
+	var checked []string
+	err := RunCheckWithDependencies(context.Background(), CheckConfig{
+		BaseConfig: BaseConfig{IncludePaths: "boms"},
+	}, io.Discard, io.Discard, Dependencies{
+		Getwd:     func() (string, error) { return repoRoot, nil },
+		LookupEnv: func(string) (string, bool) { return "", false },
+		Stat:      os.Stat,
+		WalkDir:   filepath.WalkDir,
+		RunCLI: func(args []string, _ io.Writer, _ io.Writer) error {
+			checked = append(checked, filepath.ToSlash(args[1]))
+			return nil
+		},
+		WriteOutput:  func(string, string) error { return nil },
+		WriteSummary: func(string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("RunCheckWithDependencies returned error: %v", err)
+	}
+	if len(checked) != 1 || !strings.HasSuffix(checked[0], "/boms/api.json") {
+		t.Fatalf("unexpected checked BOMs: %#v", checked)
+	}
+}
+
 func TestBuildGenerateOutputPath(t *testing.T) {
 	got := buildGenerateOutputPath("charts/api", "csbom-yaml")
 	want := filepath.Join("charts", "api", "bom.yaml")
@@ -774,7 +819,7 @@ func TestRenderSummary(t *testing.T) {
 	})
 
 	for _, fragment := range []string{
-		"helm-bom action `generate`",
+		"bom action `generate`",
 		"Changed paths: 1",
 		"Matched paths: 1",
 		"Processed paths: 1",
@@ -801,7 +846,7 @@ func TestLogList(t *testing.T) {
 			t.Fatalf("log output missing %q:\n%s", fragment, got)
 		}
 	}
-	if strings.Contains(got, "helm-bom-action:") {
+	if strings.Contains(got, "bom-action:") {
 		t.Fatalf("log output still includes old prefix:\n%s", got)
 	}
 }
