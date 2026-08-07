@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/logging"
@@ -53,21 +54,19 @@ func (r generateRunner) run() error {
 }
 
 func (r generateRunner) logStartup() {
-	r.logger.Infof("starting generate")
-	r.logger.Infof("repository root source: %s", r.repoRootSource)
-	r.logger.Infof("repository root: %s", r.repoRoot)
-	r.logger.Infof(
-		"config: changed-only=%t format=%q namespace=%q release-name=%q fail-on-no-matches=%t",
-		r.cfg.ChangedOnly,
-		r.cfg.Format,
-		r.cfg.Namespace,
-		r.cfg.ReleaseName,
-		r.cfg.FailOnNoMatches,
+	logging.LogTable(r.logger, "starting generate",
+		logging.TableRow{Label: "repository root source", Value: r.repoRootSource},
+		logging.TableRow{Label: "repository root", Value: r.repoRoot},
+		logging.TableRow{Label: "changed only", Value: strconv.FormatBool(r.cfg.ChangedOnly)},
+		logging.TableRow{Label: "format", Value: strconv.Quote(r.cfg.Format)},
+		logging.TableRow{Label: "namespace", Value: strconv.Quote(r.cfg.Namespace)},
+		logging.TableRow{Label: "release name", Value: strconv.Quote(r.cfg.ReleaseName)},
+		logging.TableRow{Label: "fail on no matches", Value: strconv.FormatBool(r.cfg.FailOnNoMatches)},
+		logging.TableRow{Label: "include paths (raw)", Value: strconv.Quote(r.cfg.IncludePaths)},
+		logging.TableRow{Label: "include paths (parsed)", Value: logging.FormatList(r.configuredPaths)},
+		logging.TableRow{Label: "exclude paths (raw)", Value: strconv.Quote(r.cfg.ExcludePaths)},
+		logging.TableRow{Label: "exclude paths (parsed)", Value: logging.FormatList(r.excludedPaths)},
 	)
-	r.logger.Infof("raw include-paths input: %q", r.cfg.IncludePaths)
-	logging.LogList(r.logger, "parsed include-paths input", r.configuredPaths)
-	r.logger.Infof("raw exclude-paths input: %q", r.cfg.ExcludePaths)
-	logging.LogList(r.logger, "parsed exclude-paths input", r.excludedPaths)
 }
 
 func (r generateRunner) resolveTargets() ([]string, error) {

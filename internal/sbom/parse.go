@@ -176,8 +176,8 @@ func parseCSBOMV2(content []byte) (Document, error) {
 		return Document{}, err
 	}
 
-	if len(payload.ContainerImages) == 0 && len(payload.HelmCharts) == 0 {
-		return Document{}, fmt.Errorf("csbom v2 does not contain OCI images or Helm charts")
+	if payload.Version != csbomV2Version {
+		return Document{}, fmt.Errorf("unsupported csbom v2 version %q", payload.Version)
 	}
 
 	components := make([]Component, 0, len(payload.ContainerImages)+len(payload.HelmCharts))

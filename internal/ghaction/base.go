@@ -1,6 +1,8 @@
 package ghaction
 
 import (
+	"errors"
+	"io"
 	"io/fs"
 	"path/filepath"
 
@@ -43,7 +45,7 @@ func (r baseRunner) discoverChartDirs() ([]string, error) {
 	return sortedKeys(targetSet), nil
 }
 
-func (r baseRunner) discoverBOMPaths() ([]string, error) {
+func (r baseRunner) discoverBOMPaths(defaultOnly bool) ([]string, error) {
 	targetSet := map[string]struct{}{}
 	if err := r.deps.WalkDir(r.repoRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -58,6 +60,9 @@ func (r baseRunner) discoverBOMPaths() ([]string, error) {
 			return nil
 		}
 		if entry.Name() == bomlint.FileName {
+			return nil
+		}
+		if defaultOnly && entry.Name() != "bom.json" {
 			return nil
 		}
 
@@ -75,9 +80,14 @@ func (r baseRunner) discoverBOMPaths() ([]string, error) {
 }
 
 func (r baseRunner) finish(mode string, result Result) error {
-	if err := writeOutputs(result, r.deps.WriteOutput); err != nil {
-		return err
+	outputErr := writeOutputs(mode, result, r.deps.WriteOutput)
+
+	var stdoutErr error
+	if mode == "check" {
+		_, stdoutErr = io.WriteString(r.stdout, renderCheckOutputSummary(result))
 	}
+
+	githubSummaryErr := r.deps.WriteSummary(renderGitHubSummary(mode, result))
 	r.logger.Infof("completed %s for %d target(s)", mode, len(result.ProcessedPaths))
-	return r.deps.WriteSummary(renderSummary(mode, result))
+	return errors.Join(outputErr, stdoutErr, githubSummaryErr)
 }

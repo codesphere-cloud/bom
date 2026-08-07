@@ -65,6 +65,34 @@ containerImages:
 	}
 }
 
+func TestParseCSBOMV2WithoutOCIReferences(t *testing.T) {
+	document, err := Parse(strings.NewReader(`
+version: "2"
+name: empty-chart
+`))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+
+	if len(document.Components) != 0 {
+		t.Fatalf("expected no components, got %#v", document.Components)
+	}
+	if len(OCIRefs(document)) != 0 {
+		t.Fatalf("expected no OCI refs, got %#v", OCIRefs(document))
+	}
+}
+
+func TestParseDoesNotTreatArbitraryYAMLAsEmptyCSBOMV2(t *testing.T) {
+	_, err := Parse(strings.NewReader(`
+replicaCount: 2
+image:
+  repository: ghcr.io/example/api
+`))
+	if err == nil {
+		t.Fatal("expected unsupported YAML to fail")
+	}
+}
+
 func TestParseCSBOMV2JSON(t *testing.T) {
 	document, err := Parse(strings.NewReader(`{
   "version": "2",

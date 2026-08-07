@@ -5,6 +5,10 @@ inputs:
     description: Newline-separated BOM file or directory paths to include for check mode. Glob patterns are supported.
     required: false
     default: ""
+  bom-paths:
+    description: Alias for include-paths. Used only when include-paths is empty.
+    required: false
+    default: ""
   exclude-paths:
     description: Newline-separated BOM file or directory paths to exclude from check mode. Glob patterns are supported.
     required: false
@@ -17,20 +21,27 @@ inputs:
     description: Enable debug logging and pass --debug through to bom check.
     required: false
     default: "false"
+  format:
+    description: Check summary format. Supported values are table and yaml.
+    required: false
+    default: table
   fail-on-no-matches:
     description: Fail instead of succeeding when no paths match the configured filters.
     required: false
     default: "false"
 outputs:
-  changed-paths:
-    description: Newline-separated changed paths considered by the action.
-    value: ${{ steps.run.outputs['changed-paths'] }}
-  matched-paths:
-    description: Newline-separated BOM paths selected after filtering.
-    value: ${{ steps.run.outputs['matched-paths'] }}
-  processed-paths:
-    description: Newline-separated checked BOM file paths.
-    value: ${{ steps.run.outputs['processed-paths'] }}
+  changed-boms:
+    description: Newline-separated changed BOMs considered by the action.
+    value: ${{ steps.run.outputs['changed-boms'] }}
+  matched-boms:
+    description: Newline-separated BOMs selected after filtering.
+    value: ${{ steps.run.outputs['matched-boms'] }}
+  processed-boms:
+    description: Newline-separated checked BOMs.
+    value: ${{ steps.run.outputs['processed-boms'] }}
+  failed-boms:
+    description: Newline-separated BOMs that failed validation.
+    value: ${{ steps.run.outputs['failed-boms'] }}
 runs:
   using: composite
   steps:
@@ -71,11 +82,12 @@ runs:
       name: Run bom check action
       shell: bash
       env:
-        INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}
-        INPUT_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
-        INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
+        INPUT_INCLUDE_PATHS: ${{ inputs['include-paths'] || inputs['bom-paths'] }}
+        INPUT_EXCLUDE_PATHS: ${{ inputs['exclude-paths'] }}
+        INPUT_CHANGED_ONLY: ${{ inputs['changed-only'] }}
         INPUT_DEBUG: ${{ inputs.debug }}
-        INPUT_FAIL_ON_NO_MATCHES: ${{ inputs.fail-on-no-matches }}
+        INPUT_SUMMARY_FORMAT: ${{ inputs.format }}
+        INPUT_FAIL_ON_NO_MATCHES: ${{ inputs['fail-on-no-matches'] }}
       run: |
         "${{ steps.resolve-binary.outputs.binary-path }}" \
           check \
@@ -83,4 +95,5 @@ runs:
           --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
+          --format="$INPUT_SUMMARY_FORMAT" \
           --fail-on-no-matches="$INPUT_FAIL_ON_NO_MATCHES"

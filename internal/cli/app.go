@@ -364,9 +364,8 @@ func runCheckWithValidator(stdout io.Writer, logger logging.Logger, cfg checkCon
 			imageCount++
 		}
 	}
-	logger.Infof("validated %d image reference(s) and %d Helm chart reference(s)", imageCount, chartCount)
-	_, err = fmt.Fprintf(stdout, "validated %d image reference(s) and %d Helm chart reference(s)\n", imageCount, chartCount)
-	return err
+	logger.Debugf("validated %d image reference(s) and %d Helm chart reference(s) in %s", imageCount, chartCount, file)
+	return nil
 }
 
 func runRegistryLogin(stdin io.Reader, stdout io.Writer, logger logging.Logger, cfg registryLoginConfig) error {

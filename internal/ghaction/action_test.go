@@ -1,6 +1,7 @@
 package ghaction
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -116,6 +117,32 @@ func TestResolveRepoRootFallsBackToGetwd(t *testing.T) {
 	}
 	if source != "cwd" {
 		t.Fatalf("unexpected repo root source: %q", source)
+	}
+}
+
+func TestDefaultWriteSummaryDoesNothingOutsideGitHub(t *testing.T) {
+	t.Setenv("GITHUB_STEP_SUMMARY", "")
+
+	deps := defaultDependencies()
+	if err := deps.WriteSummary("check summary\n"); err != nil {
+		t.Fatalf("WriteSummary returned error: %v", err)
+	}
+}
+
+func TestDefaultWriteSummaryWritesGitHubSummaryFile(t *testing.T) {
+	summaryPath := filepath.Join(t.TempDir(), "summary.md")
+	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
+
+	deps := defaultDependencies()
+	if err := deps.WriteSummary("check summary\n"); err != nil {
+		t.Fatalf("WriteSummary returned error: %v", err)
+	}
+	content, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read summary file: %v", err)
+	}
+	if string(content) != "check summary\n" {
+		t.Fatalf("unexpected summary file content: %q", content)
 	}
 }
 
@@ -587,7 +614,9 @@ func TestCheckResolveTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, path := range []string{
 		filepath.Join(repoRoot, "charts", "api", "bom.json"),
-		filepath.Join(repoRoot, "charts", "worker", "bom.yaml"),
+		filepath.Join(repoRoot, "charts", "worker", "bom.json"),
+		filepath.Join(repoRoot, "charts", "worker", "values.yaml"),
+		filepath.Join(repoRoot, "manifests.json"),
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir bom dir: %v", err)
@@ -613,7 +642,7 @@ func TestCheckResolveTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
-	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
+	want := []string{"charts/api/bom.json", "charts/worker/bom.json"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected discovered check targets:\nwant: %v\ngot:  %v", want, targets)
 	}
@@ -624,7 +653,8 @@ func TestCheckResolveTargetsAppliesExcludesWhenIncludePathsEmpty(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(repoRoot, "charts", "api", "bom.json"),
 		filepath.Join(repoRoot, "charts", "pc-applications", "bom.json"),
-		filepath.Join(repoRoot, "charts", "worker", "bom.yaml"),
+		filepath.Join(repoRoot, "charts", "worker", "bom.json"),
+		filepath.Join(repoRoot, "charts", "worker", "values.yaml"),
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir bom dir: %v", err)
@@ -651,7 +681,7 @@ func TestCheckResolveTargetsAppliesExcludesWhenIncludePathsEmpty(t *testing.T) {
 		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
-	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
+	want := []string{"charts/api/bom.json", "charts/worker/bom.json"}
 	if !slices.Equal(targets, want) {
 		t.Fatalf("unexpected check targets with excludes and empty includes:\nwant: %v\ngot:  %v", want, targets)
 	}
@@ -699,6 +729,96 @@ allowedRegistries:
 	}
 	if len(checked) != 1 || !strings.HasSuffix(checked[0], "/boms/api.json") {
 		t.Fatalf("unexpected checked BOMs: %#v", checked)
+	}
+}
+
+func TestRunCheckCollectsAllBOMFailuresAndWritesSummary(t *testing.T) {
+	repoRoot := t.TempDir()
+	for _, path := range []string{
+		filepath.Join(repoRoot, "boms", "fail-api.json"),
+		filepath.Join(repoRoot, "boms", "good.json"),
+		filepath.Join(repoRoot, "boms", "fail-worker.yaml"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir BOM directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("write BOM: %v", err)
+		}
+	}
+
+	var checked []string
+	var summary string
+	outputs := map[string]string{}
+	err := RunCheckWithDependencies(context.Background(), CheckConfig{
+		BaseConfig: BaseConfig{IncludePaths: "boms"},
+	}, io.Discard, io.Discard, Dependencies{
+		Getwd:     func() (string, error) { return repoRoot, nil },
+		LookupEnv: func(string) (string, bool) { return "", false },
+		Stat:      os.Stat,
+		WalkDir:   filepath.WalkDir,
+		RunCLI: func(args []string, _ io.Writer, _ io.Writer) error {
+			target := filepath.ToSlash(args[1])
+			checked = append(checked, target)
+			if strings.Contains(target, "fail-") {
+				return fmt.Errorf("invalid reference in %s", filepath.Base(target))
+			}
+			return nil
+		},
+		WriteOutput: func(name string, value string) error {
+			outputs[name] = value
+			return nil
+		},
+		WriteSummary: func(content string) error {
+			summary = content
+			return nil
+		},
+	})
+	if err == nil {
+		t.Fatal("expected aggregated validation error")
+	}
+	if len(checked) != 3 {
+		t.Fatalf("expected every BOM to be checked, got %#v", checked)
+	}
+	for _, fragment := range []string{"2 BOM file(s) failed validation", "boms/fail-api.json", "boms/fail-worker.yaml"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("aggregated error missing %q:\n%s", fragment, err)
+		}
+		if !strings.Contains(summary, fragment) && fragment != "2 BOM file(s) failed validation" {
+			t.Fatalf("summary missing %q:\n%s", fragment, summary)
+		}
+	}
+	if !strings.Contains(summary, "Failed BOMs: 2") || !strings.Contains(summary, "Check results") {
+		t.Fatalf("summary does not describe failures:\n%s", summary)
+	}
+	for _, fragment := range []string{"| BOM", "| Status", "| Error", "| failed", "| passed"} {
+		if !strings.Contains(summary, fragment) {
+			t.Fatalf("summary table missing %q:\n%s", fragment, summary)
+		}
+	}
+	wantFailedPaths := "boms/fail-api.json\nboms/fail-worker.yaml"
+	if outputs["failed-boms"] != wantFailedPaths {
+		t.Fatalf("unexpected failed-boms output:\nwant: %q\ngot:  %q", wantFailedPaths, outputs["failed-boms"])
+	}
+	wantProcessedBOMs := "boms/fail-api.json\nboms/fail-worker.yaml\nboms/good.json"
+	if outputs["matched-boms"] != wantProcessedBOMs || outputs["processed-boms"] != wantProcessedBOMs {
+		t.Fatalf("unexpected matched/processed BOM outputs: %#v", outputs)
+	}
+	if _, exists := outputs["failed-paths"]; exists {
+		t.Fatalf("legacy failed-paths output was written: %#v", outputs)
+	}
+}
+
+func TestIsCheckFailuresError(t *testing.T) {
+	validationErr := newCheckFailuresError([]CheckFailure{{
+		Path: "boms/failed.json",
+		Err:  fmt.Errorf("invalid image"),
+	}})
+	if !IsCheckFailuresError(validationErr) {
+		t.Fatalf("expected validation error to be recognized: %v", validationErr)
+	}
+	if IsCheckFailuresError(fmt.Errorf("write summary")) {
+		t.Fatal("unexpected non-validation error classification")
 	}
 }
 
@@ -809,8 +929,8 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 	}
 }
 
-func TestRenderSummary(t *testing.T) {
-	summary := renderSummary("generate", Result{
+func TestRenderGitHubSummary(t *testing.T) {
+	summary := renderGitHubSummary("generate", Result{
 		ChangedPaths:        []string{"charts/api/values.yaml"},
 		MatchedPaths:        []string{"charts/api"},
 		ProcessedPaths:      []string{"charts/api/bom.json"},
@@ -829,6 +949,109 @@ func TestRenderSummary(t *testing.T) {
 		if !strings.Contains(summary, fragment) {
 			t.Fatalf("summary missing %q:\n%s", fragment, summary)
 		}
+	}
+}
+
+func TestRenderCheckSummaryAsYAML(t *testing.T) {
+	summary := renderCheckOutputSummary(Result{
+		ChangedPaths:   []string{"boms/failed.json"},
+		MatchedPaths:   []string{"boms/failed.json", "boms/passed.json"},
+		ProcessedPaths: []string{"boms/failed.json", "boms/passed.json"},
+		Failures: []CheckFailure{
+			{Path: "boms/failed.json", Err: fmt.Errorf("registry denied")},
+		},
+		SummaryFormat: "yaml",
+	})
+
+	for _, fragment := range []string{
+		"changedBoms: 1",
+		"matchedBoms: 2",
+		"processedBoms: 2",
+		"failedBoms: 1",
+		"bom: boms/failed.json",
+		"status: failed",
+		"error: registry denied",
+		"bom: boms/passed.json",
+		"status: passed",
+	} {
+		if !strings.Contains(summary, fragment) {
+			t.Fatalf("YAML summary missing %q:\n%s", fragment, summary)
+		}
+	}
+	if strings.Contains(summary, "| BOM") || strings.Contains(summary, "```yaml") {
+		t.Fatalf("YAML summary contains table output:\n%s", summary)
+	}
+}
+
+func TestRenderCheckSummaryAsTable(t *testing.T) {
+	summary := renderCheckOutputSummary(Result{
+		MatchedPaths:   []string{"boms/passed.json"},
+		ProcessedPaths: []string{"boms/passed.json"},
+		SummaryFormat:  "table",
+	})
+
+	for _, fragment := range []string{"METRIC", "VALUE", "Processed BOMs", "BOM", "STATUS", "boms/passed.json", "passed"} {
+		if !strings.Contains(summary, fragment) {
+			t.Fatalf("table summary missing %q:\n%s", fragment, summary)
+		}
+	}
+	if strings.Contains(summary, "| BOM") || strings.Contains(summary, "status:") {
+		t.Fatalf("stdout table contains another format:\n%s", summary)
+	}
+}
+
+func TestFinishSeparatesStdoutAndGitHubSummaryFormats(t *testing.T) {
+	var stdout bytes.Buffer
+	var githubSummary string
+	runner := baseRunner{
+		stdout: &stdout,
+		logger: newTestLogger(false),
+		deps: Dependencies{
+			WriteOutput: func(string, string) error { return nil },
+			WriteSummary: func(content string) error {
+				githubSummary = content
+				return nil
+			},
+		},
+	}
+	result := Result{
+		MatchedPaths:   []string{"boms/failed.json"},
+		ProcessedPaths: []string{"boms/failed.json"},
+		Failures: []CheckFailure{
+			{Path: "boms/failed.json", Err: fmt.Errorf("registry denied")},
+		},
+		SummaryFormat: "yaml",
+	}
+
+	if err := runner.finish("check", result); err != nil {
+		t.Fatalf("finish returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "status: failed") || strings.Contains(stdout.String(), "| BOM") {
+		t.Fatalf("stdout is not raw YAML:\n%s", stdout.String())
+	}
+	if !strings.Contains(githubSummary, "| BOM") || strings.Contains(githubSummary, "```yaml") {
+		t.Fatalf("GitHub summary is not a Markdown table:\n%s", githubSummary)
+	}
+}
+
+func TestNormalizeCheckSummaryFormat(t *testing.T) {
+	for input, want := range map[string]string{
+		"":      "table",
+		"table": "table",
+		"YAML":  "yaml",
+		"yml":   "yaml",
+	} {
+		got, err := normalizeCheckSummaryFormat(input)
+		if err != nil {
+			t.Fatalf("normalizeCheckSummaryFormat(%q) returned error: %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("normalizeCheckSummaryFormat(%q): want %q, got %q", input, want, got)
+		}
+	}
+
+	if _, err := normalizeCheckSummaryFormat("json"); err == nil {
+		t.Fatal("expected unsupported summary format to fail")
 	}
 }
 
@@ -882,7 +1105,7 @@ func TestGenerateRunnerLogsRepoRootSource(t *testing.T) {
 	if err := runner.run(); err != nil {
 		t.Fatalf("runner.run returned error: %v", err)
 	}
-	if !strings.Contains(logger.String(), "repository root source: GITHUB_WORKSPACE") {
+	if !strings.Contains(logger.String(), "repository root source  GITHUB_WORKSPACE") {
 		t.Fatalf("expected startup log to include repo root source, got logs=%s", logger.String())
 	}
 }

@@ -4,11 +4,18 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
 func (r checkRunner) run() error {
+	summaryFormat, err := normalizeCheckSummaryFormat(r.cfg.SummaryFormat)
+	if err != nil {
+		return err
+	}
+	r.cfg.SummaryFormat = summaryFormat
 	r.logStartup()
 
 	changedPaths, err := r.resolveChangedPaths(r.cfg.ChangedOnly)
@@ -20,17 +27,22 @@ func (r checkRunner) run() error {
 	if err != nil {
 		return err
 	}
-	logging.LogList(r.logger, "check targets before changed-path filtering", targets)
+	logging.LogListDebug(r.logger, "check targets before changed-path filtering", targets)
 
 	filteredTargets := filterCheckTargetsByChangedPaths(targets, changedPaths)
 	if len(changedPaths) > 0 && len(filteredTargets) == 0 && len(targets) > 0 {
 		r.logger.Infof("changed-path filtering removed all check targets")
 	}
 	r.logMatchedTargets(filteredTargets)
+	changedBOMs := []string(nil)
+	if len(changedPaths) > 0 {
+		changedBOMs = filteredTargets
+	}
 
 	result := Result{
-		ChangedPaths: changedPaths,
-		MatchedPaths: filteredTargets,
+		ChangedPaths:  changedBOMs,
+		MatchedPaths:  filteredTargets,
+		SummaryFormat: summaryFormat,
 	}
 
 	if len(filteredTargets) == 0 {
@@ -40,26 +52,46 @@ func (r checkRunner) run() error {
 		return r.finish("check", result)
 	}
 
-	result.ProcessedPaths, err = r.runTargets(filteredTargets)
-	if err != nil {
-		return err
+	result.ProcessedPaths, result.Failures = r.runTargets(filteredTargets)
+	finishErr := r.finish("check", result)
+	validationErr := newCheckFailuresError(result.Failures)
+	if finishErr != nil {
+		return fmt.Errorf("write check summary: %w", finishErr)
 	}
-	return r.finish("check", result)
+	if validationErr != nil {
+		return validationErr
+	}
+	return finishErr
 }
 
 func (r checkRunner) logStartup() {
-	r.logger.Infof("starting check")
-	r.logger.Infof("repository root source: %s", r.repoRootSource)
-	r.logger.Infof("repository root: %s", r.repoRoot)
-	r.logger.Infof("config: changed-only=%t fail-on-no-matches=%t", r.cfg.ChangedOnly, r.cfg.FailOnNoMatches)
-	r.logger.Infof("raw include-paths input: %q", r.cfg.IncludePaths)
-	logging.LogList(r.logger, "parsed include-paths input", r.configuredPaths)
-	r.logger.Infof("raw exclude-paths input: %q", r.cfg.ExcludePaths)
-	logging.LogList(r.logger, "parsed exclude-paths input", r.excludedPaths)
+	logging.LogTable(r.logger, "starting check",
+		logging.TableRow{Label: "repository root source", Value: r.repoRootSource},
+		logging.TableRow{Label: "repository root", Value: r.repoRoot},
+		logging.TableRow{Label: "changed only", Value: strconv.FormatBool(r.cfg.ChangedOnly)},
+		logging.TableRow{Label: "fail on no matches", Value: strconv.FormatBool(r.cfg.FailOnNoMatches)},
+		logging.TableRow{Label: "summary format", Value: r.cfg.SummaryFormat},
+		logging.TableRow{Label: "include paths (raw)", Value: strconv.Quote(r.cfg.IncludePaths)},
+		logging.TableRow{Label: "include paths (parsed)", Value: logging.FormatList(r.configuredPaths)},
+		logging.TableRow{Label: "exclude paths (raw)", Value: strconv.Quote(r.cfg.ExcludePaths)},
+		logging.TableRow{Label: "exclude paths (parsed)", Value: logging.FormatList(r.excludedPaths)},
+	)
+}
+
+func normalizeCheckSummaryFormat(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "table":
+		return "table", nil
+	case "yaml", "yml":
+		return "yaml", nil
+	default:
+		return "", fmt.Errorf("unsupported check summary format %q: expected table or yaml", value)
+	}
 }
 
 func (r checkRunner) resolveTargets() ([]string, error) {
-	allTargets, err := r.discoverBOMPaths()
+	defaultOnly := len(r.configuredPaths) == 0
+	allTargets, err := r.discoverBOMPaths(defaultOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -81,25 +113,59 @@ func (r checkRunner) resolveTargets() ([]string, error) {
 	return filteredTargets, nil
 }
 
-func (r checkRunner) runTargets(targets []string) ([]string, error) {
+func (r checkRunner) runTargets(targets []string) ([]string, []CheckFailure) {
 	processed := make([]string, 0, len(targets))
+	failures := make([]CheckFailure, 0)
 	for _, target := range targets {
-		r.logger.Infof("checking BOM %s", target)
+		r.logger.Debugf("checking BOM %s", target)
+		processed = append(processed, target)
 		args := []string{"check", filepath.Join(r.repoRoot, filepath.FromSlash(target))}
 		if r.cfg.Debug {
 			args = append(args, "--debug")
 		}
 		if err := r.deps.RunCLI(args, r.stdout, r.logger.Writer()); err != nil {
-			return nil, fmt.Errorf("check BOM %s: %w", target, err)
+			r.logger.Debugf("BOM %s failed validation: %v", target, err)
+			failures = append(failures, CheckFailure{Path: target, Err: err})
 		}
-		processed = append(processed, target)
 	}
-	return processed, nil
+	return processed, failures
+}
+
+type checkFailuresError struct {
+	failures []CheckFailure
+}
+
+func newCheckFailuresError(failures []CheckFailure) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	return &checkFailuresError{failures: failures}
+}
+
+func IsCheckFailuresError(err error) bool {
+	var checkErr *checkFailuresError
+	return errors.As(err, &checkErr)
+}
+
+func (e *checkFailuresError) Error() string {
+	message := fmt.Sprintf("%d BOM file(s) failed validation:", len(e.failures))
+	for _, failure := range e.failures {
+		message += fmt.Sprintf("\n- %s: %v", failure.Path, failure.Err)
+	}
+	return message
+}
+
+func (e *checkFailuresError) Unwrap() []error {
+	errs := make([]error, 0, len(e.failures))
+	for _, failure := range e.failures {
+		errs = append(errs, failure.Err)
+	}
+	return errs
 }
 
 func (r checkRunner) logMatchedTargets(targets []string) {
-	r.logger.Infof("found %d BOM file(s) to process", len(targets))
-	logging.LogList(r.logger, "matched BOM targets", targets)
+	r.logger.Debugf("found %d BOM file(s) to process", len(targets))
+	logging.LogListDebug(r.logger, "matched BOM targets", targets)
 }
 
 func (r checkRunner) matchesConfiguredTarget(target string) bool {

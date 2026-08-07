@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/tabwriter"
+
+	"sigs.k8s.io/yaml"
 )
 
 func buildGenerateOutputPath(target string, format string) string {
@@ -46,7 +49,11 @@ func isSupportedBOMFile(path string) bool {
 	}
 }
 
-func writeOutputs(result Result, writeOutput func(string, string) error) error {
+func writeOutputs(mode string, result Result, writeOutput func(string, string) error) error {
+	if mode == "check" {
+		return writeCheckOutputs(result, writeOutput)
+	}
+
 	if err := writeOutput("changed-paths", strings.Join(result.ChangedPaths, "\n")); err != nil {
 		return err
 	}
@@ -65,7 +72,28 @@ func writeOutputs(result Result, writeOutput func(string, string) error) error {
 	return writeOutput("any-processed-changed", fmt.Sprintf("%t", result.AnyProcessedChanged))
 }
 
-func renderSummary(mode string, result Result) string {
+func writeCheckOutputs(result Result, writeOutput func(string, string) error) error {
+	if err := writeOutput("changed-boms", strings.Join(result.ChangedPaths, "\n")); err != nil {
+		return err
+	}
+	if err := writeOutput("matched-boms", strings.Join(result.MatchedPaths, "\n")); err != nil {
+		return err
+	}
+	if err := writeOutput("processed-boms", strings.Join(result.ProcessedPaths, "\n")); err != nil {
+		return err
+	}
+	failedBOMs := make([]string, 0, len(result.Failures))
+	for _, failure := range result.Failures {
+		failedBOMs = append(failedBOMs, failure.Path)
+	}
+	return writeOutput("failed-boms", strings.Join(failedBOMs, "\n"))
+}
+
+func renderGitHubSummary(mode string, result Result) string {
+	if mode == "check" {
+		return renderGitHubCheckSummary(result)
+	}
+
 	lines := []string{
 		fmt.Sprintf("### bom action `%s`", mode),
 		"",
@@ -76,6 +104,143 @@ func renderSummary(mode string, result Result) string {
 		fmt.Sprintf("- Any processed output changed: %t", result.AnyProcessedChanged),
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func renderGitHubCheckSummary(result Result) string {
+	lines := []string{
+		"### bom action `check`",
+		"",
+		fmt.Sprintf("- Changed BOMs: %d", len(result.ChangedPaths)),
+		fmt.Sprintf("- Matched BOMs: %d", len(result.MatchedPaths)),
+		fmt.Sprintf("- Processed BOMs: %d", len(result.ProcessedPaths)),
+		fmt.Sprintf("- Failed BOMs: %d", len(result.Failures)),
+	}
+	if len(result.ProcessedPaths) > 0 {
+		lines = append(lines, "", "#### Check results", "", renderMarkdownCheckResultsTable(result))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+type yamlCheckSummary struct {
+	ChangedBOMs   int               `json:"changedBoms"`
+	MatchedBOMs   int               `json:"matchedBoms"`
+	ProcessedBOMs int               `json:"processedBoms"`
+	FailedBOMs    int               `json:"failedBoms"`
+	Results       []yamlCheckResult `json:"results,omitempty"`
+}
+
+type yamlCheckResult struct {
+	BOM    string `json:"bom"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+func renderCheckSummaryYAML(result Result) string {
+	failuresByPath := make(map[string]error, len(result.Failures))
+	for _, failure := range result.Failures {
+		failuresByPath[failure.Path] = failure.Err
+	}
+
+	summary := yamlCheckSummary{
+		ChangedBOMs:   len(result.ChangedPaths),
+		MatchedBOMs:   len(result.MatchedPaths),
+		ProcessedBOMs: len(result.ProcessedPaths),
+		FailedBOMs:    len(result.Failures),
+		Results:       make([]yamlCheckResult, 0, len(result.ProcessedPaths)),
+	}
+	for _, path := range result.ProcessedPaths {
+		checkResult := yamlCheckResult{BOM: path, Status: "passed"}
+		if failure, failed := failuresByPath[path]; failed {
+			checkResult.Status = "failed"
+			checkResult.Error = failure.Error()
+		}
+		summary.Results = append(summary.Results, checkResult)
+	}
+
+	content, err := yaml.Marshal(summary)
+	if err != nil {
+		return fmt.Sprintf("error: failed to render YAML summary: %v\n", err)
+	}
+	return string(content)
+}
+
+func renderCheckOutputSummary(result Result) string {
+	if result.SummaryFormat == "yaml" {
+		return renderCheckSummaryYAML(result)
+	}
+	return renderCheckSummaryTable(result)
+}
+
+func renderCheckSummaryTable(result Result) string {
+	failuresByPath := make(map[string]error, len(result.Failures))
+	for _, failure := range result.Failures {
+		failuresByPath[failure.Path] = failure.Err
+	}
+
+	var builder strings.Builder
+	table := tabwriter.NewWriter(&builder, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(table, "METRIC\tVALUE")
+	_, _ = fmt.Fprintf(table, "Changed BOMs\t%d\n", len(result.ChangedPaths))
+	_, _ = fmt.Fprintf(table, "Matched BOMs\t%d\n", len(result.MatchedPaths))
+	_, _ = fmt.Fprintf(table, "Processed BOMs\t%d\n", len(result.ProcessedPaths))
+	_, _ = fmt.Fprintf(table, "Failed BOMs\t%d\n", len(result.Failures))
+	_, _ = fmt.Fprintln(table)
+	_, _ = fmt.Fprintln(table, "BOM\tSTATUS\tERROR")
+	for _, path := range result.ProcessedPaths {
+		status := "passed"
+		message := ""
+		if failure, failed := failuresByPath[path]; failed {
+			status = "failed"
+			message = failure.Error()
+		}
+		_, _ = fmt.Fprintf(table, "%s\t%s\t%s\n", textTableCell(path), status, textTableCell(message))
+	}
+	_ = table.Flush()
+	return builder.String()
+}
+
+func renderMarkdownCheckResultsTable(result Result) string {
+	failuresByPath := make(map[string]error, len(result.Failures))
+	for _, failure := range result.Failures {
+		failuresByPath[failure.Path] = failure.Err
+	}
+
+	var builder strings.Builder
+	table := tabwriter.NewWriter(&builder, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(table, "| BOM\t| Status\t| Error |")
+	_, _ = fmt.Fprintln(table, "| ---\t| ---\t| --- |")
+	for _, path := range result.ProcessedPaths {
+		status := "passed"
+		message := ""
+		if failure, failed := failuresByPath[path]; failed {
+			status = "failed"
+			message = failure.Error()
+		}
+		_, _ = fmt.Fprintf(
+			table,
+			"| %s\t| %s\t| %s |\n",
+			markdownTableCell(path),
+			status,
+			markdownTableCell(message),
+		)
+	}
+	_ = table.Flush()
+	return strings.TrimSuffix(builder.String(), "\n")
+}
+
+func textTableCell(value string) string {
+	value = strings.ReplaceAll(value, "\t", " ")
+	value = strings.ReplaceAll(value, "\r\n", "; ")
+	value = strings.ReplaceAll(value, "\n", "; ")
+	return strings.ReplaceAll(value, "\r", "; ")
+}
+
+func markdownTableCell(value string) string {
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.ReplaceAll(value, "\t", " ")
+	value = strings.ReplaceAll(value, "\r\n", "<br>")
+	value = strings.ReplaceAll(value, "\n", "<br>")
+	return strings.ReplaceAll(value, "\r", "<br>")
 }
 
 func appendKeyValueOutput(envName string, name string, value string) error {

@@ -41,8 +41,8 @@ components:
 		t.Fatalf("unexpected validated refs:\nwant: %s\ngot:  %s", want, got)
 	}
 
-	if !strings.Contains(stdout.String(), "validated 2 image reference(s)") {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout, got %q", stdout.String())
 	}
 }
 
@@ -125,8 +125,8 @@ containerImages:
 	if strings.Join(got, ",") != "ghcr.io/example/api:1.2.3,ghcr.io/example/charts/dependency:2.0.0" {
 		t.Fatalf("unexpected validated refs: %#v", got)
 	}
-	if !strings.Contains(stdout.String(), "1 Helm chart reference(s)") {
-		t.Fatalf("unexpected output: %q", stdout.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout, got %q", stdout.String())
 	}
 }
 

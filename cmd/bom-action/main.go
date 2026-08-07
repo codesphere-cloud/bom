@@ -23,7 +23,9 @@ func main() {
 	cmd.SetErr(os.Stderr)
 
 	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if !ghaction.IsCheckFailuresError(err) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
@@ -55,7 +57,8 @@ func newGenerateCommand() *cobra.Command {
 
 func newCheckCommand() *cobra.Command {
 	cfg := ghaction.CheckConfig{
-		BaseConfig: ghaction.BaseConfig{},
+		BaseConfig:    ghaction.BaseConfig{},
+		SummaryFormat: "table",
 	}
 
 	cmd := &cobra.Command{
@@ -69,6 +72,7 @@ func newCheckCommand() *cobra.Command {
 	addBaseFlags(cmd, &cfg.BaseConfig)
 	flags := cmd.Flags()
 	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated BOM paths to exclude. Glob patterns are supported.")
+	flags.StringVar(&cfg.SummaryFormat, "format", cfg.SummaryFormat, "Check summary format: table or yaml.")
 	return cmd
 }
 

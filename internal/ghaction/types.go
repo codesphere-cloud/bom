@@ -31,7 +31,8 @@ type GenerateConfig struct {
 
 type CheckConfig struct {
 	BaseConfig
-	ExcludePaths string
+	ExcludePaths  string
+	SummaryFormat string
 }
 
 type Dependencies struct {
@@ -50,9 +51,16 @@ type Result struct {
 	ChangedPaths        []string
 	MatchedPaths        []string
 	ProcessedPaths      []string
+	Failures            []CheckFailure
+	SummaryFormat       string
 	ChangedOutputPaths  []string
 	ChangedTargetPaths  []string
 	AnyProcessedChanged bool
+}
+
+type CheckFailure struct {
+	Path string
+	Err  error
 }
 
 type baseRunner struct {

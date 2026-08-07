@@ -239,19 +239,24 @@ Registry-login inputs:
 
 Check-specific inputs:
 
-- `include-paths`: newline-separated BOM selectors to include. Selectors can be exact paths, path prefixes, or glob patterns. If omitted, the Action auto-discovers BOM files from the repository root.
+- `include-paths`: newline-separated BOM selectors to include. Selectors can be exact paths, path prefixes, or glob patterns. Explicit selectors may target supported JSON or YAML BOM files. If omitted, the Action auto-discovers only files named `bom.json` from the repository root.
+- `bom-paths`: alias for `include-paths`; `include-paths` takes precedence when both are set
 - `exclude-paths`: newline-separated BOM selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only validate BOM files that were changed in the current push or pull request
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
+- `format`: stdout check-summary format, either `table` (default) or `yaml`; the GitHub step summary always uses a Markdown table
 - `fail-on-no-matches`: fail instead of succeeding when no BOM paths remain after filtering
 
 When `changed-only: true` is set, the Action only validates BOM files that were themselves changed in the current push or pull request.
 
 Check outputs:
 
-- `changed-paths`
-- `matched-paths`
-- `processed-paths`
+- `changed-boms`
+- `matched-boms`
+- `processed-boms`
+- `failed-boms`
+
+All selected BOMs are checked even when some fail. The Action exits unsuccessfully after processing every BOM and writes a step-summary table containing each BOM and its validation status or error.
 
 ## Users Of The CLI
 
