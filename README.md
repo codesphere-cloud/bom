@@ -242,8 +242,8 @@ Credentials are stored in the Docker config used by `crane` and the Docker CLI, 
 
 This repository ships two composite GitHub Actions:
 
-- [.github/actions/generate/action.yml](/Users/schrodit/dev/cs/helm-bom/.github/actions/generate/action.yml) for generating BOM files
-- [.github/actions/check/action.yml](/Users/schrodit/dev/cs/helm-bom/.github/actions/check/action.yml) for validating BOM files
+- [generate/action.yml](/Users/schrodit/dev/cs/helm-bom/generate/action.yml) for generating BOM files
+- [check/action.yml](/Users/schrodit/dev/cs/helm-bom/check/action.yml) for validating BOM files
 
 Each Action installs Go and Helm on the runner, builds `helm-bom-action` from the checked-in source, and runs it directly without a Docker workspace mount.
 
@@ -258,7 +258,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom/.github/actions/generate@main
+      - uses: codesphere-cloud/helm-bom/generate@main
         with:
           paths: |
             charts/*
@@ -278,7 +278,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom/.github/actions/check@main
+      - uses: codesphere-cloud/helm-bom/check@main
         with:
           paths: |
             charts/*/bom.json

@@ -66,7 +66,7 @@ runs:
             ;;
         esac
 
-        binary_path="${{ github.action_path }}/../../../dist/${goos}-${goarch}/helm-bom-action"
+        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/helm-bom-action"
         if [ ! -f "$binary_path" ]; then
           echo "missing prebuilt action binary: $binary_path" >&2
           exit 1

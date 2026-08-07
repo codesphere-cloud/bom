@@ -63,7 +63,7 @@ runs:
       env:
         RUNNER_OS_NAME: ${{ runner.os }}
         RUNNER_ARCH_NAME: ${{ runner.arch }}
-      working-directory: ${{ github.action_path }}/../../..
+      working-directory: ${{ github.action_path }}/..
       run: |
         case "$RUNNER_OS_NAME" in
           Linux) goos=linux ;;
@@ -82,7 +82,7 @@ runs:
             ;;
         esac
 
-        binary_path="${{ github.action_path }}/../../../dist/${goos}-${goarch}/helm-bom-action"
+        binary_path="${{ github.action_path }}/../dist/${goos}-${goarch}/helm-bom-action"
         if [ ! -f "$binary_path" ]; then
           echo "missing prebuilt action binary: $binary_path" >&2
           exit 1
