@@ -12,9 +12,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codesphere-cloud/helm-bom/internal/logging"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
+
+type testLogger struct {
+	builder strings.Builder
+	debug   bool
+}
+
+func newTestLogger(debug bool) *testLogger {
+	return &testLogger{debug: debug}
+}
+
+func (l *testLogger) Infof(format string, args ...any) {
+	_, _ = fmt.Fprintf(&l.builder, format+"\n", args...)
+}
+
+func (l *testLogger) Debugf(format string, args ...any) {
+	if !l.debug {
+		return
+	}
+	l.Infof(format, args...)
+}
+
+func (l *testLogger) Writer() io.Writer {
+	return io.Discard
+}
+
+func (l *testLogger) String() string {
+	return l.builder.String()
+}
 
 func TestResolveGitRangeForPullRequest(t *testing.T) {
 	eventPath := filepath.Join(t.TempDir(), "event.json")
@@ -23,7 +52,7 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 		t.Fatalf("write event payload: %v", err)
 	}
 
-	runner := actionRunner{
+	runner := baseRunner{
 		deps: Dependencies{
 			ReadFile: os.ReadFile,
 			LookupEnv: func(key string) (string, bool) {
@@ -156,34 +185,34 @@ func TestChangedPathsBetweenCommits(t *testing.T) {
 	}
 }
 
-func TestResolveGenerateTargetsDiscoversCharts(t *testing.T) {
+func TestGenerateResolveTargetsDiscoversCharts(t *testing.T) {
 	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "charts", "api"), 0o755); err != nil {
-		t.Fatalf("mkdir chart: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(repoRoot, "charts", "worker"), 0o755); err != nil {
-		t.Fatalf("mkdir chart: %v", err)
-	}
 	for _, path := range []string{
 		filepath.Join(repoRoot, "charts", "api", "Chart.yaml"),
 		filepath.Join(repoRoot, "charts", "worker", "Chart.yaml"),
 	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir chart dir: %v", err)
+		}
 		if err := os.WriteFile(path, []byte("name: test\n"), 0o600); err != nil {
 			t.Fatalf("write chart file: %v", err)
 		}
 	}
 
-	runner := actionRunner{
-		repoRoot: repoRoot,
-		deps: Dependencies{
-			Stat:    os.Stat,
-			WalkDir: filepath.WalkDir,
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
 		},
 	}
 
-	targets, err := runner.resolveGenerateTargets()
+	targets, err := runner.resolveTargets()
 	if err != nil {
-		t.Fatalf("resolveGenerateTargets returned error: %v", err)
+		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
 	want := []string{"charts/api", "charts/worker"}
@@ -192,7 +221,7 @@ func TestResolveGenerateTargetsDiscoversCharts(t *testing.T) {
 	}
 }
 
-func TestResolveGenerateTargetsSupportsGlobs(t *testing.T) {
+func TestGenerateResolveTargetsSupportsGlobs(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, dir := range []string{
 		filepath.Join(repoRoot, "charts", "api"),
@@ -206,18 +235,21 @@ func TestResolveGenerateTargetsSupportsGlobs(t *testing.T) {
 		}
 	}
 
-	runner := actionRunner{
-		repoRoot:        repoRoot,
-		configuredPaths: []string{"charts/*"},
-		deps: Dependencies{
-			Stat:    os.Stat,
-			WalkDir: filepath.WalkDir,
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"charts/*"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
 		},
 	}
 
-	targets, err := runner.resolveGenerateTargets()
+	targets, err := runner.resolveTargets()
 	if err != nil {
-		t.Fatalf("resolveGenerateTargets returned error: %v", err)
+		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
 	want := []string{"charts/api", "charts/worker"}
@@ -237,35 +269,37 @@ func TestFilterGenerateTargetsByChangedPaths(t *testing.T) {
 	}
 }
 
-func TestResolveCheckTargetsExpandsDirectories(t *testing.T) {
+func TestCheckResolveTargetsExpandsDirectories(t *testing.T) {
 	repoRoot := t.TempDir()
 	bomDir := filepath.Join(repoRoot, "boms")
 	if err := os.MkdirAll(bomDir, 0o755); err != nil {
 		t.Fatalf("mkdir bom dir: %v", err)
 	}
 
-	files := []string{
+	for _, path := range []string{
 		filepath.Join(bomDir, "app.json"),
 		filepath.Join(bomDir, "worker.yaml"),
-	}
-	for _, path := range files {
+	} {
 		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 			t.Fatalf("write bom file: %v", err)
 		}
 	}
 
-	runner := actionRunner{
-		repoRoot:        repoRoot,
-		configuredPaths: []string{"boms"},
-		deps: Dependencies{
-			Stat:    os.Stat,
-			WalkDir: filepath.WalkDir,
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot:        repoRoot,
+			configuredPaths: []string{"boms"},
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
 		},
 	}
 
-	targets, err := runner.resolveCheckTargets()
+	targets, err := runner.resolveTargets()
 	if err != nil {
-		t.Fatalf("resolveCheckTargets returned error: %v", err)
+		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
 	want := []string{"boms/app.json", "boms/worker.yaml"}
@@ -274,7 +308,7 @@ func TestResolveCheckTargetsExpandsDirectories(t *testing.T) {
 	}
 }
 
-func TestResolveCheckTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
+func TestCheckResolveTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, path := range []string{
 		filepath.Join(repoRoot, "charts", "api", "bom.json"),
@@ -288,17 +322,20 @@ func TestResolveCheckTargetsDiscoversRepoRootWhenEmpty(t *testing.T) {
 		}
 	}
 
-	runner := actionRunner{
-		repoRoot: repoRoot,
-		deps: Dependencies{
-			Stat:    os.Stat,
-			WalkDir: filepath.WalkDir,
+	runner := checkRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			deps: Dependencies{
+				Stat:    os.Stat,
+				WalkDir: filepath.WalkDir,
+			},
+			logger: newTestLogger(false),
 		},
 	}
 
-	targets, err := runner.resolveCheckTargets()
+	targets, err := runner.resolveTargets()
 	if err != nil {
-		t.Fatalf("resolveCheckTargets returned error: %v", err)
+		t.Fatalf("resolveTargets returned error: %v", err)
 	}
 
 	want := []string{"charts/api/bom.json", "charts/worker/bom.yaml"}
@@ -337,25 +374,26 @@ func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 		t.Fatalf("write existing output: %v", err)
 	}
 
-	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
-	runner := actionRunner{
-		repoRoot: repoRoot,
-		cfg:      cfg,
-		stdout:   io.Discard,
-		stderr:   io.Discard,
-		deps: Dependencies{
-			RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
-				if len(args) == 0 {
-					return fmt.Errorf("missing args")
-				}
-				return os.WriteFile(outputPath, []byte("after\n"), 0o600)
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			stdout:   io.Discard,
+			logger:   newTestLogger(false),
+			deps: Dependencies{
+				RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
+					if len(args) == 0 {
+						return fmt.Errorf("missing args")
+					}
+					return os.WriteFile(outputPath, []byte("after\n"), 0o600)
+				},
 			},
 		},
+		cfg: GenerateConfig{Format: "csbom-yaml", Namespace: "default"},
 	}
 
-	processed, changedOutputs, changedTargets, err := runner.runGenerateTargets([]string{"charts/api"})
+	processed, changedOutputs, changedTargets, err := runner.runTargets([]string{"charts/api"})
 	if err != nil {
-		t.Fatalf("runGenerateTargets returned error: %v", err)
+		t.Fatalf("runTargets returned error: %v", err)
 	}
 
 	if !slices.Equal(processed, []string{"charts/api/bom.yaml"}) {
@@ -383,22 +421,23 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 		t.Fatalf("write existing output: %v", err)
 	}
 
-	cfg := Config{Format: "csbom-yaml", Namespace: "default"}
-	runner := actionRunner{
-		repoRoot: repoRoot,
-		cfg:      cfg,
-		stdout:   io.Discard,
-		stderr:   io.Discard,
-		deps: Dependencies{
-			RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
-				return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			repoRoot: repoRoot,
+			stdout:   io.Discard,
+			logger:   newTestLogger(false),
+			deps: Dependencies{
+				RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
+					return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
+				},
 			},
 		},
+		cfg: GenerateConfig{Format: "csbom-yaml", Namespace: "default"},
 	}
 
-	processed, changedOutputs, changedTargets, err := runner.runGenerateTargets([]string{"charts/api"})
+	processed, changedOutputs, changedTargets, err := runner.runTargets([]string{"charts/api"})
 	if err != nil {
-		t.Fatalf("runGenerateTargets returned error: %v", err)
+		t.Fatalf("runTargets returned error: %v", err)
 	}
 
 	if !slices.Equal(processed, []string{"charts/api/bom.yaml"}) {
@@ -436,13 +475,12 @@ func TestRenderSummary(t *testing.T) {
 }
 
 func TestLogList(t *testing.T) {
-	var stderr strings.Builder
+	logger := newTestLogger(false)
+	logging.LogList(logger, "changed paths", []string{"charts/api/Chart.yaml", "charts/api/values.yaml"})
 
-	logList(&stderr, "changed paths", []string{"charts/api/Chart.yaml", "charts/api/values.yaml"})
-
-	got := stderr.String()
+	got := logger.String()
 	for _, fragment := range []string{
-		"helm-bom-action: changed paths (2):",
+		"changed paths (2):",
 		"charts/api/Chart.yaml",
 		"charts/api/values.yaml",
 	} {
@@ -450,33 +488,43 @@ func TestLogList(t *testing.T) {
 			t.Fatalf("log output missing %q:\n%s", fragment, got)
 		}
 	}
+	if strings.Contains(got, "helm-bom-action:") {
+		t.Fatalf("log output still includes old prefix:\n%s", got)
+	}
 }
 
-func TestActionRunnerLogsRepoRootSource(t *testing.T) {
-	var stderr strings.Builder
+func TestGenerateRunnerLogsRepoRootSource(t *testing.T) {
+	logger := newTestLogger(false)
 
-	runner := actionRunner{
-		cfg:            Config{Mode: "generate"},
-		stderr:         &stderr,
-		repoRoot:       "/github/workspace",
-		repoRootSource: "GITHUB_WORKSPACE",
-		deps: Dependencies{
-			WalkDir: func(root string, fn fs.WalkDirFunc) error {
-				return nil
+	runner := generateRunner{
+		baseRunner: baseRunner{
+			stdout:         io.Discard,
+			repoRoot:       "/github/workspace",
+			repoRootSource: "GITHUB_WORKSPACE",
+			logger:         logger,
+			deps: Dependencies{
+				WalkDir: func(root string, fn fs.WalkDirFunc) error {
+					return nil
+				},
+				WriteSummary: func(content string) error {
+					return nil
+				},
+				WriteOutput: func(name string, value string) error {
+					return nil
+				},
 			},
-			WriteSummary: func(content string) error {
-				return nil
-			},
-			WriteOutput: func(name string, value string) error {
-				return nil
-			},
+		},
+		cfg: GenerateConfig{
+			BaseConfig: BaseConfig{},
+			Format:     "spdx-json",
+			Namespace:  "default",
 		},
 	}
 
 	if err := runner.run(); err != nil {
 		t.Fatalf("runner.run returned error: %v", err)
 	}
-	if !strings.Contains(stderr.String(), "repository root source: GITHUB_WORKSPACE") {
-		t.Fatalf("expected startup log to include repo root source, got logs=%s", stderr.String())
+	if !strings.Contains(logger.String(), "repository root source: GITHUB_WORKSPACE") {
+		t.Fatalf("expected startup log to include repo root source, got logs=%s", logger.String())
 	}
 }

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/codesphere-cloud/helm-bom/internal/images"
+	"github.com/codesphere-cloud/helm-bom/internal/logging"
 	dockerconfig "github.com/docker/cli/cli/config"
 	"sigs.k8s.io/yaml"
 )
@@ -26,7 +28,7 @@ components:
 
 	calls := make([]string, 0, 2)
 	var stdout bytes.Buffer
-	if err := runCheckWithValidator(&stdout, checkConfig{bomPath: path}, func(refs []images.ImageRef) error {
+	if err := runCheckWithValidator(&stdout, logging.NewWriterLogger(io.Discard, false), checkConfig{bomPath: path}, func(refs []images.ImageRef) error {
 		for _, ref := range refs {
 			calls = append(calls, ref.Reference)
 		}
@@ -49,7 +51,7 @@ func TestRunRegistryLoginStoresCredentials(t *testing.T) {
 	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
 
 	var stdout bytes.Buffer
-	err := runRegistryLogin(strings.NewReader(""), &stdout, &stdout, registryLoginConfig{
+	err := runRegistryLogin(strings.NewReader(""), &stdout, logging.NewWriterLogger(io.Discard, false), registryLoginConfig{
 		server:   "ghcr.io",
 		username: "alice",
 		password: "secret",
@@ -82,7 +84,7 @@ func TestRunRegistryLoginReadsPasswordFromStdin(t *testing.T) {
 	dockerConfigDir := t.TempDir()
 	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
 
-	err := runRegistryLogin(strings.NewReader("hunter2\n"), &bytes.Buffer{}, &bytes.Buffer{}, registryLoginConfig{
+	err := runRegistryLogin(strings.NewReader("hunter2\n"), &bytes.Buffer{}, logging.NewWriterLogger(io.Discard, false), registryLoginConfig{
 		server:        "docker.io",
 		username:      "bob",
 		passwordStdin: true,

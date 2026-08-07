@@ -8,6 +8,7 @@ import (
 	"github.com/codesphere-cloud/helm-bom/internal/bomrc"
 	"github.com/codesphere-cloud/helm-bom/internal/helm"
 	"github.com/codesphere-cloud/helm-bom/internal/images"
+	"github.com/codesphere-cloud/helm-bom/internal/logging"
 	"github.com/codesphere-cloud/helm-bom/internal/sbom"
 	cranecmd "github.com/google/go-containerregistry/cmd/crane/cmd"
 	"github.com/spf13/cobra"
@@ -75,7 +76,7 @@ func NewRootCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			}
 
 			cfg.chartPath = args[0]
-			return runGenerate(cmd.OutOrStdout(), cfg)
+			return runGenerate(cmd.OutOrStdout(), logging.NewWriterLogger(cmd.ErrOrStderr(), cfg.debug), cfg)
 		},
 	}
 
@@ -120,7 +121,7 @@ func newGenerateCommand(stdout io.Writer, cfg *config) *cobra.Command {
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runGenerate(cmd.OutOrStdout(), *cfg)
+			return runGenerate(cmd.OutOrStdout(), logging.NewWriterLogger(cmd.ErrOrStderr(), cfg.debug), *cfg)
 		},
 	}
 
@@ -143,7 +144,7 @@ func newCheckCommand(stdout io.Writer, cfg *checkConfig) *cobra.Command {
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCheck(cmd.OutOrStdout(), *cfg)
+			return runCheck(cmd.OutOrStdout(), logging.NewWriterLogger(cmd.ErrOrStderr(), cfg.debug), *cfg)
 		},
 	}
 
@@ -179,7 +180,7 @@ func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRegistryLogin(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), *cfg)
+			return runRegistryLogin(cmd.InOrStdin(), cmd.OutOrStdout(), logging.NewWriterLogger(cmd.ErrOrStderr(), cfg.debug), *cfg)
 		},
 	}
 
@@ -193,7 +194,7 @@ func newRegistryLoginCommand(stdout io.Writer, cfg *registryLoginConfig) *cobra.
 	return cmd
 }
 
-func runGenerate(stdout io.Writer, cfg config) error {
+func runGenerate(stdout io.Writer, logger logging.Logger, cfg config) error {
 	bomConfig, err := bomrc.Load(cfg.chartPath)
 	if err != nil {
 		return err
@@ -271,6 +272,7 @@ func runGenerate(stdout io.Writer, cfg config) error {
 	}
 
 	if cfg.outputPath != "" {
+		logger.Debugf("writing SBOM output to %s", cfg.outputPath)
 		file, createErr := os.Create(cfg.outputPath)
 		if createErr != nil {
 			return fmt.Errorf("create output file: %w", createErr)
@@ -318,11 +320,11 @@ func prependBOMGenerationValuesFile(valuesFiles *[]string, bomGenerationValues m
 	}, nil
 }
 
-func runCheck(stdout io.Writer, cfg checkConfig) error {
-	return runCheckWithValidator(stdout, cfg, images.ValidateReferencesExist)
+func runCheck(stdout io.Writer, logger logging.Logger, cfg checkConfig) error {
+	return runCheckWithValidator(stdout, logger, cfg, images.ValidateReferencesExist)
 }
 
-func runCheckWithValidator(stdout io.Writer, cfg checkConfig, validator func([]images.ImageRef) error) error {
+func runCheckWithValidator(stdout io.Writer, logger logging.Logger, cfg checkConfig, validator func([]images.ImageRef) error) error {
 	file, err := os.Open(cfg.bomPath)
 	if err != nil {
 		return fmt.Errorf("open bom file: %w", err)
@@ -341,11 +343,12 @@ func runCheckWithValidator(stdout io.Writer, cfg checkConfig, validator func([]i
 		return err
 	}
 
+	logger.Infof("validated %d image reference(s)", len(refs))
 	_, err = fmt.Fprintf(stdout, "validated %d image reference(s)\n", len(refs))
 	return err
 }
 
-func runRegistryLogin(stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg registryLoginConfig) error {
+func runRegistryLogin(stdin io.Reader, stdout io.Writer, logger logging.Logger, cfg registryLoginConfig) error {
 	restore, err := prepareCraneLoginStdin(stdin, cfg.passwordStdin)
 	if err != nil {
 		return err
@@ -356,8 +359,9 @@ func runRegistryLogin(stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg r
 
 	cmd := cranecmd.NewCmdAuthLogin("helm-bom registry")
 	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
+	cmd.SetErr(logger.Writer())
 	cmd.SetIn(stdin)
+	logger.Debugf("logging in to registry %s", cfg.server)
 
 	args := []string{cfg.server, "--username", cfg.username}
 	if cfg.passwordStdin {

@@ -88,7 +88,7 @@ runs:
         INPUT_FAIL_ON_NO_MATCHES: ${{ inputs.fail-on-no-matches }}
       run: |
         "${{ steps.resolve-binary.outputs.binary-path }}" \
-          --mode=check \
+          check \
           --paths="$INPUT_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
