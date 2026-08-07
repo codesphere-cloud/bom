@@ -1,0 +1,98 @@
+name: helm-bom check
+description: Validate generated BOM files against upstream registries inside GitHub Actions.
+inputs:
+  paths:
+    description: Newline-separated BOM file or directory paths for check mode. Glob patterns are supported.
+    required: false
+    default: ""
+  changed-only:
+    description: Restrict processing to BOM files changed in the current push or pull request.
+    required: false
+    default: "false"
+  debug:
+    description: Enable debug logging and pass --debug through to helm-bom check.
+    required: false
+    default: "false"
+  registry-server:
+    description: Optional registry server to log in to before running checks.
+    required: false
+    default: ""
+  registry-username:
+    description: Optional registry username used with registry-server.
+    required: false
+    default: ""
+  registry-password:
+    description: Optional registry password used with registry-server.
+    required: false
+    default: ""
+  fail-on-no-matches:
+    description: Fail instead of succeeding when no paths match the configured filters.
+    required: false
+    default: "false"
+outputs:
+  changed-paths:
+    description: Newline-separated changed paths considered by the action.
+    value: ${{ steps.run.outputs['changed-paths'] }}
+  matched-paths:
+    description: Newline-separated BOM paths selected after filtering.
+    value: ${{ steps.run.outputs['matched-paths'] }}
+  processed-paths:
+    description: Newline-separated checked BOM file paths.
+    value: ${{ steps.run.outputs['processed-paths'] }}
+runs:
+  using: composite
+  steps:
+    - id: resolve-binary
+      name: Resolve helm-bom action binary
+      shell: bash
+      env:
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+      run: |
+        case "$RUNNER_OS_NAME" in
+          Linux) goos=linux ;;
+          *)
+            echo "unsupported runner.os: $RUNNER_OS_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$RUNNER_ARCH_NAME" in
+          X64) goarch=amd64 ;;
+          ARM64) goarch=arm64 ;;
+          *)
+            echo "unsupported runner.arch: $RUNNER_ARCH_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        binary_path="${{ github.action_path }}/../../../dist/${goos}-${goarch}/helm-bom-action"
+        if [ ! -f "$binary_path" ]; then
+          echo "missing prebuilt action binary: $binary_path" >&2
+          exit 1
+        fi
+
+        chmod +x "$binary_path"
+        echo "binary-path=$binary_path" >> "$GITHUB_OUTPUT"
+
+    - id: run
+      name: Run helm-bom check action
+      shell: bash
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_REGISTRY_SERVER: ${{ inputs.registry-server }}
+        INPUT_REGISTRY_USERNAME: ${{ inputs.registry-username }}
+        INPUT_REGISTRY_PASSWORD: ${{ inputs.registry-password }}
+        INPUT_FAIL_ON_NO_MATCHES: ${{ inputs.fail-on-no-matches }}
+      run: |
+        "${{ steps.resolve-binary.outputs.binary-path }}" \
+          --mode=check \
+          --paths="$INPUT_PATHS" \
+          --changed-only="$INPUT_CHANGED_ONLY" \
+          --debug="$INPUT_DEBUG" \
+          --registry-server="$INPUT_REGISTRY_SERVER" \
+          --registry-username="$INPUT_REGISTRY_USERNAME" \
+          --registry-password="$INPUT_REGISTRY_PASSWORD" \
+          --fail-on-no-matches="$INPUT_FAIL_ON_NO_MATCHES"

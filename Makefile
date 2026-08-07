@@ -3,7 +3,7 @@ GOLANGCI_LINT_CACHE := $(CURDIR)/.tmp/golangci-lint-cache
 GOCACHE := $(CURDIR)/.tmp/go-build
 LINT_PACKAGES := ./cmd/helm-bom ./internal/cli ./internal/helm ./internal/images ./internal/sbom ./test/e2e
 
-.PHONY: help check-tools build test test-e2e fmt fmt-check lint clean
+.PHONY: help check-tools build test test-e2e fmt fmt-check lint dist clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -15,8 +15,17 @@ check-tools: ## Verify required external tools are installed
 build: check-tools ## Build the helm-bom binary
 	go build -o bin/helm-bom ./cmd/helm-bom
 
+build-linux: check-tools ## Build the helm-bom binary
+	GOOS=linux GOARCH=amd64 go build -o bin/helm-bom ./cmd/helm-bom
+
 build-action: check-tools ## Build the helm-bom binary
 	go build -o bin/helm-bom-action ./cmd/helm-bom-action
+
+build-action-linux: check-tools ## Build the helm-bom binary
+	GOOS=linux GOARCH=amd64 go build -o bin/helm-bom-action ./cmd/helm-bom-action
+
+dist: ## Build release binaries for the default OS/arch matrix into dist/
+	./scripts/build-dist.sh
 
 test: check-tools ## Run all Go tests
 	go test ./...
@@ -34,4 +43,4 @@ lint: ## Run the linter
 	go tool golangci-lint run
 
 clean: ## Remove build artifacts
-	rm -rf bin .tmp
+	rm -rf bin dist .tmp

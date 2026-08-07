@@ -1,49 +1,34 @@
-name: helm-bom
-description: Generate Helm chart BOMs or validate BOM image references inside GitHub Actions.
+name: helm-bom generate
+description: Generate Helm chart BOMs inside GitHub Actions.
 inputs:
-  mode:
-    description: 'Action mode: generate or check.'
-    required: true
   paths:
-    description: Newline-separated chart paths for generate mode or BOM file or directory paths for check mode. Glob patterns are supported.
+    description: Newline-separated chart paths for generate mode. Glob patterns are supported.
     required: false
     default: ""
   changed-only:
-    description: Restrict processing to paths changed in the current push or pull request.
+    description: Restrict processing to charts changed in the current push or pull request.
     required: false
     default: "false"
   debug:
-    description: Enable debug logging and pass --debug through to helm-bom subcommands.
+    description: Enable debug logging and pass --debug through to helm-bom generate.
     required: false
     default: "false"
   format:
-    description: Output format used in generate mode.
+    description: Output format used for generated BOM files.
     required: false
-    default: csbom-yaml
+    default: csbom-v2-json
   release-name:
-    description: Optional Helm release name override for generate mode.
+    description: Optional Helm release name override.
     required: false
     default: ""
   namespace:
-    description: Helm namespace used for generate mode.
+    description: Helm namespace used for generation.
     required: false
     default: default
   validate-configured-image-exists:
-    description: Fail generate mode when configured additional images do not resolve.
+    description: Fail when configured additional images do not resolve.
     required: false
     default: "false"
-  registry-server:
-    description: Optional registry server to log in to before running checks.
-    required: false
-    default: ""
-  registry-username:
-    description: Optional registry username used with registry-server.
-    required: false
-    default: ""
-  registry-password:
-    description: Optional registry password used with registry-server.
-    required: false
-    default: ""
   fail-on-no-matches:
     description: Fail instead of succeeding when no paths match the configured filters.
     required: false
@@ -53,10 +38,10 @@ outputs:
     description: Newline-separated changed paths considered by the action.
     value: ${{ steps.run.outputs['changed-paths'] }}
   matched-paths:
-    description: Newline-separated chart or BOM paths selected after filtering.
+    description: Newline-separated chart paths selected after filtering.
     value: ${{ steps.run.outputs['matched-paths'] }}
   processed-paths:
-    description: Newline-separated generated BOM files or checked BOM paths.
+    description: Newline-separated generated BOM file paths.
     value: ${{ steps.run.outputs['processed-paths'] }}
   changed-output-paths:
     description: Newline-separated generated BOM paths whose contents changed during this run.
@@ -70,24 +55,46 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v7
-      with:
-        go-version-file: ${{ github.action_path }}/go.mod
-        cache: true
-        cache-dependency-path: ${{ github.action_path }}/go.sum
-
     - uses: azure/setup-helm@v5
 
-    - name: Build helm-bom action binary
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      run: go build -o "$RUNNER_TEMP/helm-bom-action" ./cmd/helm-bom-action
-
-    - id: run
-      name: Run helm-bom action
+    - id: resolve-binary
+      name: Resolve helm-bom action binary
       shell: bash
       env:
-        INPUT_MODE: ${{ inputs.mode }}
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        case "$RUNNER_OS_NAME" in
+          Linux) goos=linux ;;
+          *)
+            echo "unsupported runner.os: $RUNNER_OS_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$RUNNER_ARCH_NAME" in
+          X64) goarch=amd64 ;;
+          ARM64) goarch=arm64 ;;
+          *)
+            echo "unsupported runner.arch: $RUNNER_ARCH_NAME" >&2
+            exit 1
+            ;;
+        esac
+
+        binary_path="${{ github.action_path }}/../../../dist/${goos}-${goarch}/helm-bom-action"
+        if [ ! -f "$binary_path" ]; then
+          echo "missing prebuilt action binary: $binary_path" >&2
+          exit 1
+        fi
+
+        chmod +x "$binary_path"
+        echo "binary-path=$binary_path" >> "$GITHUB_OUTPUT"
+
+    - id: run
+      name: Run helm-bom generate action
+      shell: bash
+      env:
         INPUT_PATHS: ${{ inputs.paths }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_DEBUG: ${{ inputs.debug }}
@@ -95,13 +102,10 @@ runs:
         INPUT_RELEASE_NAME: ${{ inputs.release-name }}
         INPUT_NAMESPACE: ${{ inputs.namespace }}
         INPUT_VALIDATE_CONFIGURED_IMAGE_EXISTS: ${{ inputs.validate-configured-image-exists }}
-        INPUT_REGISTRY_SERVER: ${{ inputs.registry-server }}
-        INPUT_REGISTRY_USERNAME: ${{ inputs.registry-username }}
-        INPUT_REGISTRY_PASSWORD: ${{ inputs.registry-password }}
         INPUT_FAIL_ON_NO_MATCHES: ${{ inputs.fail-on-no-matches }}
       run: |
-        "$RUNNER_TEMP/helm-bom-action" \
-          --mode="$INPUT_MODE" \
+        "${{ steps.resolve-binary.outputs.binary-path }}" \
+          --mode=generate \
           --paths="$INPUT_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
           --debug="$INPUT_DEBUG" \
@@ -109,7 +113,4 @@ runs:
           --release-name="$INPUT_RELEASE_NAME" \
           --namespace="$INPUT_NAMESPACE" \
           --validate-configured-image-exists="$INPUT_VALIDATE_CONFIGURED_IMAGE_EXISTS" \
-          --registry-server="$INPUT_REGISTRY_SERVER" \
-          --registry-username="$INPUT_REGISTRY_USERNAME" \
-          --registry-password="$INPUT_REGISTRY_PASSWORD" \
           --fail-on-no-matches="$INPUT_FAIL_ON_NO_MATCHES"

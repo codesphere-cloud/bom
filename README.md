@@ -238,14 +238,14 @@ printf '%s\n' "$TOKEN" | go run ./cmd/helm-bom registry login ghcr.io -u "$USER"
 
 Credentials are stored in the Docker config used by `crane` and the Docker CLI, honoring `DOCKER_CONFIG` when it is set.
 
-## GitHub Action
+## GitHub Actions
 
-This repository also ships a composite GitHub Action defined by [action.yml](/Users/schrodit/dev/cs/helm-bom/action.yml). The Action installs Go and Helm on the runner, builds `helm-bom-action` from the checked-in source, and runs it directly without a Docker workspace mount.
+This repository ships two composite GitHub Actions:
 
-The Action supports two modes:
+- [.github/actions/generate/action.yml](/Users/schrodit/dev/cs/helm-bom/.github/actions/generate/action.yml) for generating BOM files
+- [.github/actions/check/action.yml](/Users/schrodit/dev/cs/helm-bom/.github/actions/check/action.yml) for validating BOM files
 
-- `generate` to render charts and write BOMs
-- `check` to validate existing BOM files against upstream registries
+Each Action installs Go and Helm on the runner, builds `helm-bom-action` from the checked-in source, and runs it directly without a Docker workspace mount.
 
 ### Generate BOMs In CI
 
@@ -258,15 +258,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom@main
+      - uses: codesphere-cloud/helm-bom/.github/actions/generate@main
         with:
-          mode: generate
           paths: |
             charts/*
           changed-only: true
 ```
 
-When `changed-only: true` is set in `generate` mode, the Action only runs charts whose directories contain files changed by the current push or pull request. Each generated BOM is written into the matching chart directory as `bom.json` or `bom.yaml`, depending on `format`. If `paths` is omitted, the Action discovers charts from the repository root automatically.
+When `changed-only: true` is set, the generate Action only runs charts whose directories contain files changed by the current push or pull request. Each generated BOM is written into the matching chart directory as `bom.json` or `bom.yaml`, depending on `format`. If `paths` is omitted, the Action discovers charts from the repository root automatically.
 
 ### Check BOMs In CI
 
@@ -279,9 +278,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codesphere-cloud/helm-bom@main
+      - uses: codesphere-cloud/helm-bom/.github/actions/check@main
         with:
-          mode: check
           paths: |
             charts/*/bom.json
           changed-only: true
@@ -290,9 +288,9 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-When `changed-only: true` is set in `check` mode, the Action only validates BOM files that were themselves changed by the current push or pull request. If `paths` is omitted, the Action discovers BOM files from the repository root automatically.
+When `changed-only: true` is set, the check Action only validates BOM files that were themselves changed by the current push or pull request. If `paths` is omitted, the Action discovers BOM files from the repository root automatically.
 
-The Action writes these outputs:
+The generate Action writes these outputs:
 
 - `changed-paths`
 - `matched-paths`
@@ -300,3 +298,9 @@ The Action writes these outputs:
 - `changed-output-paths`
 - `changed-target-paths`
 - `any-processed-changed`
+
+The check Action writes these outputs:
+
+- `changed-paths`
+- `matched-paths`
+- `processed-paths`

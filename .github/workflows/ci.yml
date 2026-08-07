@@ -46,3 +46,33 @@ jobs:
 
       - name: End-to-End Test
         run: make test-e2e
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build dist artifacts
+        run: ./scripts/build-dist.sh
+
+      - name: Run Generate Mode Via Local Generate Action
+        uses: ./.github/actions/generate
+        with:
+          paths: testdata/charts/*
+          changed-only: "false"
+
+      - name: Verify Generated BOM
+        run: test -f testdata/charts/e2e/bom.yaml
+
+      - name: Run Check Mode Via Local Check Action
+        uses: ./.github/actions/check
+        with:
+          paths: testdata/charts/*/bom.yaml
+          changed-only: "false"
