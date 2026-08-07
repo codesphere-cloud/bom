@@ -3,3 +3,4 @@ allowedRegistries:
   - docker.io
   - ghcr.io
   - quay.io
+  - registry.k8s.io

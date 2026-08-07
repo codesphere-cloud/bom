@@ -67,19 +67,19 @@ func TestBOMExtractsImagesFromChart(t *testing.T) {
 	slices.Sort(got)
 
 	want := []string{
-		"busybox@1.36.1",
-		"ghcr.io/example/api@1.2.3",
-		"ghcr.io/example/metrics@9.8.7",
-		"quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"registry.k8s.io/coredns/coredns@v1.11.3",
+		"registry.k8s.io/e2e-test-images/agnhost@2.53",
+		"registry.k8s.io/etcd@3.5.15-0",
+		"registry.k8s.io/pause@3.10",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected extracted packages:\nwant: %v\ngot:  %v", want, got)
 	}
 
-	assertPURL(t, doc.Packages, "ghcr.io/example/api", "pkg:oci/ghcr.io/example/api@1.2.3")
-	assertPURL(t, doc.Packages, "busybox", "pkg:oci/busybox@1.36.1")
-	assertPURL(t, doc.Packages, "ghcr.io/example/metrics", "pkg:oci/ghcr.io/example/metrics@9.8.7")
-	assertPURL(t, doc.Packages, "quay.io/example/worker", "pkg:oci/quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	assertPURL(t, doc.Packages, "registry.k8s.io/coredns/coredns", "pkg:oci/registry.k8s.io/coredns/coredns@v1.11.3")
+	assertPURL(t, doc.Packages, "registry.k8s.io/e2e-test-images/agnhost", "pkg:oci/registry.k8s.io/e2e-test-images/agnhost@2.53")
+	assertPURL(t, doc.Packages, "registry.k8s.io/etcd", "pkg:oci/registry.k8s.io/etcd@3.5.15-0")
+	assertPURL(t, doc.Packages, "registry.k8s.io/pause", "pkg:oci/registry.k8s.io/pause@3.10")
 }
 
 func buildBinary(t *testing.T, repoRoot string) string {

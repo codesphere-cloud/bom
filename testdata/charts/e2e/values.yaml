@@ -1,8 +1,8 @@
 api:
-  image: ghcr.io/example/api:1.2.3
+  image: registry.k8s.io/pause:3.10
 
 init:
-  image: busybox:1.36.1
+  image: registry.k8s.io/coredns/coredns:v1.11.3
 
 cron:
-  image: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  image: registry.k8s.io/etcd:3.5.15-0
