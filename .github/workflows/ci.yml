@@ -69,10 +69,10 @@ jobs:
           changed-only: "false"
 
       - name: Verify Generated BOM
-        run: test -f testdata/charts/e2e/bom.yaml
+        run: test -f testdata/charts/e2e/bom.json
 
       - name: Run Check Mode Via Local Check Action
         uses: ./check
         with:
-          paths: testdata/charts/*/bom.yaml
+          paths: testdata/charts/*/bom.json
           changed-only: "false"
