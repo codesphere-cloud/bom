@@ -153,6 +153,7 @@ type actionRunner struct {
 	stdout          io.Writer
 	stderr          io.Writer
 	repoRoot        string
+	repoRootSource  string
 	configuredPaths []string
 }
 
@@ -161,7 +162,7 @@ func Run(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer) er
 }
 
 func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stderr io.Writer, deps Dependencies) error {
-	repoRoot, err := resolveRepoRoot(deps.Getwd, deps.LookupEnv)
+	repoRoot, repoRootSource, err := resolveRepoRoot(deps.Getwd, deps.LookupEnv)
 	if err != nil {
 		return err
 	}
@@ -173,20 +174,26 @@ func RunWithDependencies(ctx context.Context, cfg Config, stdout io.Writer, stde
 		stdout:          stdout,
 		stderr:          stderr,
 		repoRoot:        repoRoot,
+		repoRootSource:  repoRootSource,
 		configuredPaths: parseList(cfg.Paths),
 	}
 	return runner.run()
 }
 
-func resolveRepoRoot(getwd func() (string, error), lookupEnv func(string) (string, bool)) (string, error) {
+func resolveRepoRoot(getwd func() (string, error), lookupEnv func(string) (string, bool)) (string, string, error) {
 	if workspace, ok := lookupEnv("GITHUB_WORKSPACE"); ok && strings.TrimSpace(workspace) != "" {
-		return workspace, nil
+		return workspace, "GITHUB_WORKSPACE", nil
 	}
-	return getwd()
+	wd, err := getwd()
+	if err != nil {
+		return "", "", err
+	}
+	return wd, "cwd", nil
 }
 
 func (r actionRunner) run() error {
 	logf(r.stderr, "starting helm-bom action in %q mode", r.cfg.Mode)
+	logf(r.stderr, "repository root source: %s", r.repoRootSource)
 	logf(r.stderr, "repository root: %s", r.repoRoot)
 	logf(r.stderr, "config: changed-only=%t format=%q namespace=%q release-name=%q fail-on-no-matches=%t", r.cfg.ChangedOnly, r.cfg.Format, r.cfg.Namespace, r.cfg.ReleaseName, r.cfg.FailOnNoMatches)
 	logf(r.stderr, "raw paths input: %q", r.cfg.Paths)
@@ -458,9 +465,20 @@ func (r actionRunner) discoverChartDirs() ([]string, error) {
 			return walkErr
 		}
 
+		if r.cfg.Debug {
+			kind := "file"
+			if entry.IsDir() {
+				kind = "dir"
+			}
+			logf(r.stderr, "discoverChartDirs visited %s: %s", kind, toRelativeSlash(r.repoRoot, path))
+		}
+
 		if entry.IsDir() {
 			switch entry.Name() {
 			case ".git", ".github":
+				if r.cfg.Debug {
+					logf(r.stderr, "discoverChartDirs skipping directory: %s", toRelativeSlash(r.repoRoot, path))
+				}
 				return filepath.SkipDir
 			}
 			return nil
@@ -470,6 +488,9 @@ func (r actionRunner) discoverChartDirs() ([]string, error) {
 			return nil
 		}
 
+		if r.cfg.Debug {
+			logf(r.stderr, "discoverChartDirs found chart manifest: %s", toRelativeSlash(r.repoRoot, path))
+		}
 		targetSet[toRelativeSlash(r.repoRoot, filepath.Dir(path))] = struct{}{}
 		return nil
 	}); err != nil {

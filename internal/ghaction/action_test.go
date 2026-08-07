@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,7 +54,7 @@ func TestResolveGitRangeForPullRequest(t *testing.T) {
 }
 
 func TestResolveRepoRootPrefersGitHubWorkspace(t *testing.T) {
-	repoRoot, err := resolveRepoRoot(func() (string, error) {
+	repoRoot, source, err := resolveRepoRoot(func() (string, error) {
 		return "/tmp/cwd", nil
 	}, func(key string) (string, bool) {
 		if key == "GITHUB_WORKSPACE" {
@@ -67,10 +68,13 @@ func TestResolveRepoRootPrefersGitHubWorkspace(t *testing.T) {
 	if repoRoot != "/github/workspace" {
 		t.Fatalf("unexpected repo root: %q", repoRoot)
 	}
+	if source != "GITHUB_WORKSPACE" {
+		t.Fatalf("unexpected repo root source: %q", source)
+	}
 }
 
 func TestResolveRepoRootFallsBackToGetwd(t *testing.T) {
-	repoRoot, err := resolveRepoRoot(func() (string, error) {
+	repoRoot, source, err := resolveRepoRoot(func() (string, error) {
 		return "/tmp/cwd", nil
 	}, func(key string) (string, bool) {
 		return "", false
@@ -80,6 +84,9 @@ func TestResolveRepoRootFallsBackToGetwd(t *testing.T) {
 	}
 	if repoRoot != "/tmp/cwd" {
 		t.Fatalf("unexpected repo root: %q", repoRoot)
+	}
+	if source != "cwd" {
+		t.Fatalf("unexpected repo root source: %q", source)
 	}
 }
 
@@ -434,5 +441,34 @@ func TestLogList(t *testing.T) {
 		if !strings.Contains(got, fragment) {
 			t.Fatalf("log output missing %q:\n%s", fragment, got)
 		}
+	}
+}
+
+func TestActionRunnerLogsRepoRootSource(t *testing.T) {
+	var stderr strings.Builder
+
+	runner := actionRunner{
+		cfg:            Config{Mode: "generate"},
+		stderr:         &stderr,
+		repoRoot:       "/github/workspace",
+		repoRootSource: "GITHUB_WORKSPACE",
+		deps: Dependencies{
+			WalkDir: func(root string, fn fs.WalkDirFunc) error {
+				return nil
+			},
+			WriteSummary: func(content string) error {
+				return nil
+			},
+			WriteOutput: func(name string, value string) error {
+				return nil
+			},
+		},
+	}
+
+	if err := runner.run(); err != nil {
+		t.Fatalf("runner.run returned error: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "repository root source: GITHUB_WORKSPACE") {
+		t.Fatalf("expected startup log to include repo root source, got logs=%s", stderr.String())
 	}
 }
