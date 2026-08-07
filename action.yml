@@ -63,7 +63,7 @@ outputs:
     description: Whether any generated BOM output changed during this run.
 runs:
   using: docker
-  image: docker://ghcr.io/codesphere-cloud/helm-bom@sha256:4ff36b54c0c9338aa5abb3fc681b833162cf5be59698b2c6fdfe4d3b9c46c541
+  image: docker://ghcr.io/codesphere-cloud/helm-bom@sha256:1318dd8ae7d58f95ff06fd7d03fb536563d2033f33629acdcb775dd94b1a2f96
   args:
     - --mode=${{ inputs.mode }}
     - --paths=${{ inputs.paths }}
