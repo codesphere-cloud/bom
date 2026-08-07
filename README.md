@@ -383,6 +383,8 @@ make dist
 
 - [cmd/bom](/Users/schrodit/dev/cs/bom/cmd/bom): CLI entrypoint
 - [cmd/bom-action](/Users/schrodit/dev/cs/bom/cmd/bom-action): GitHub Action wrapper entrypoint
+- [internal/cli](/Users/schrodit/dev/cs/bom/internal/cli): Cobra command and flag wiring
+- [internal/check](/Users/schrodit/dev/cs/bom/internal/check), [internal/generate](/Users/schrodit/dev/cs/bom/internal/generate), and [internal/login](/Users/schrodit/dev/cs/bom/internal/login): reusable business workflows shared by the CLI and Actions
 - [internal/helm](/Users/schrodit/dev/cs/bom/internal/helm): Helm templating
 - [internal/images](/Users/schrodit/dev/cs/bom/internal/images): image extraction, configured images, validation
 - [internal/sbom](/Users/schrodit/dev/cs/bom/internal/sbom): SPDX and `csbom` / `csbom-v2` formatting and parsing

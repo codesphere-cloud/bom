@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/bomlint"
-	"github.com/codesphere-cloud/bom/internal/cli"
+	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
+	generateworkflow "github.com/codesphere-cloud/bom/internal/generate"
 	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
@@ -40,7 +41,8 @@ type Dependencies struct {
 	ReadFile     func(string) ([]byte, error)
 	Stat         func(string) (fs.FileInfo, error)
 	WalkDir      func(string, fs.WalkDirFunc) error
-	RunCLI       func([]string, io.Writer, io.Writer) error
+	GenerateBOM  func(io.Writer, logging.Logger, generateworkflow.Config) error
+	CheckBOM     func(logging.Logger, checkworkflow.Config) error
 	RunGitDiff   func(context.Context, string, string, string) ([]string, error)
 	LookupEnv    func(string) (string, bool)
 	WriteOutput  func(string, string) error
@@ -87,11 +89,12 @@ type checkRunner struct {
 
 func defaultDependencies() Dependencies {
 	return Dependencies{
-		Getwd:    os.Getwd,
-		ReadFile: os.ReadFile,
-		Stat:     os.Stat,
-		WalkDir:  filepath.WalkDir,
-		RunCLI:   cli.Run,
+		Getwd:       os.Getwd,
+		ReadFile:    os.ReadFile,
+		Stat:        os.Stat,
+		WalkDir:     filepath.WalkDir,
+		GenerateBOM: generateworkflow.Run,
+		CheckBOM:    checkworkflow.Run,
 		RunGitDiff: func(ctx context.Context, repoRoot string, baseSHA string, headSHA string) ([]string, error) {
 			return changedPathsBetweenCommits(ctx, repoRoot, baseSHA, headSHA)
 		},

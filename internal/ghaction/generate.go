@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	generateworkflow "github.com/codesphere-cloud/bom/internal/generate"
 	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
@@ -111,21 +112,16 @@ func (r generateRunner) runTargets(targets []string) ([]string, []string, []stri
 			return nil, nil, nil, fmt.Errorf("create output directory for %s: %w", target, err)
 		}
 
-		args := []string{"generate", filepath.Join(r.repoRoot, filepath.FromSlash(target)), "--format", r.cfg.Format, "--output", outputPath}
-		if r.cfg.ReleaseName != "" {
-			args = append(args, "--release-name", r.cfg.ReleaseName)
+		cfg := generateworkflow.Config{
+			ChartPath:                    filepath.Join(r.repoRoot, filepath.FromSlash(target)),
+			ReleaseName:                  r.cfg.ReleaseName,
+			Namespace:                    r.cfg.Namespace,
+			Format:                       r.cfg.Format,
+			OutputPath:                   outputPath,
+			Debug:                        r.cfg.Debug,
+			ValidateConfiguredImageExist: r.cfg.ValidateConfiguredImageExist,
 		}
-		if r.cfg.Namespace != "" {
-			args = append(args, "--namespace", r.cfg.Namespace)
-		}
-		if r.cfg.ValidateConfiguredImageExist {
-			args = append(args, "--validate-configured-image-exists")
-		}
-		if r.cfg.Debug {
-			args = append(args, "--debug")
-		}
-
-		if err := r.deps.RunCLI(args, r.stdout, r.logger.Writer()); err != nil {
+		if err := r.deps.GenerateBOM(r.stdout, r.logger, cfg); err != nil {
 			return nil, nil, nil, fmt.Errorf("generate chart %s: %w", target, err)
 		}
 

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
+	generateworkflow "github.com/codesphere-cloud/bom/internal/generate"
 	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -717,8 +719,8 @@ allowedRegistries:
 		LookupEnv: func(string) (string, bool) { return "", false },
 		Stat:      os.Stat,
 		WalkDir:   filepath.WalkDir,
-		RunCLI: func(args []string, _ io.Writer, _ io.Writer) error {
-			checked = append(checked, filepath.ToSlash(args[1]))
+		CheckBOM: func(_ logging.Logger, cfg checkworkflow.Config) error {
+			checked = append(checked, filepath.ToSlash(cfg.BOMPath))
 			return nil
 		},
 		WriteOutput:  func(string, string) error { return nil },
@@ -757,8 +759,8 @@ func TestRunCheckCollectsAllBOMFailuresAndWritesSummary(t *testing.T) {
 		LookupEnv: func(string) (string, bool) { return "", false },
 		Stat:      os.Stat,
 		WalkDir:   filepath.WalkDir,
-		RunCLI: func(args []string, _ io.Writer, _ io.Writer) error {
-			target := filepath.ToSlash(args[1])
+		CheckBOM: func(_ logging.Logger, cfg checkworkflow.Config) error {
+			target := filepath.ToSlash(cfg.BOMPath)
 			checked = append(checked, target)
 			if strings.Contains(target, "fail-") {
 				return fmt.Errorf("invalid reference in %s", filepath.Base(target))
@@ -858,9 +860,9 @@ func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 			stdout:   io.Discard,
 			logger:   newTestLogger(false),
 			deps: Dependencies{
-				RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
-					if len(args) == 0 {
-						return fmt.Errorf("missing args")
+				GenerateBOM: func(_ io.Writer, _ logging.Logger, cfg generateworkflow.Config) error {
+					if cfg.ChartPath == "" {
+						return fmt.Errorf("missing chart path")
 					}
 					return os.WriteFile(outputPath, []byte("after\n"), 0o600)
 				},
@@ -905,7 +907,7 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 			stdout:   io.Discard,
 			logger:   newTestLogger(false),
 			deps: Dependencies{
-				RunCLI: func(args []string, stdout io.Writer, stderr io.Writer) error {
+				GenerateBOM: func(_ io.Writer, _ logging.Logger, _ generateworkflow.Config) error {
 					return os.WriteFile(outputPath, []byte("stable\n"), 0o600)
 				},
 			},

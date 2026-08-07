@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	if err := cli.Run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	application := cli.New(os.Stdin, os.Stdout, os.Stderr)
+	if err := application.Run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

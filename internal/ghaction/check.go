@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
 	"github.com/codesphere-cloud/bom/internal/logging"
 )
 
@@ -119,11 +120,10 @@ func (r checkRunner) runTargets(targets []string) ([]string, []CheckFailure) {
 	for _, target := range targets {
 		r.logger.Debugf("checking BOM %s", target)
 		processed = append(processed, target)
-		args := []string{"check", filepath.Join(r.repoRoot, filepath.FromSlash(target))}
-		if r.cfg.Debug {
-			args = append(args, "--debug")
+		cfg := checkworkflow.Config{
+			BOMPath: filepath.Join(r.repoRoot, filepath.FromSlash(target)),
 		}
-		if err := r.deps.RunCLI(args, r.stdout, r.logger.Writer()); err != nil {
+		if err := r.deps.CheckBOM(r.logger, cfg); err != nil {
 			r.logger.Debugf("BOM %s failed validation: %v", target, err)
 			failures = append(failures, CheckFailure{Path: target, Err: err})
 		}
