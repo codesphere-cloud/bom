@@ -9,7 +9,14 @@ import (
 
 	"github.com/codesphere-cloud/bom/internal/images"
 	"github.com/codesphere-cloud/bom/internal/logging"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
+
+func TestCheck(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "BOM check suite")
+}
 
 func TestRunValidatesBOM(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bom.yaml")
@@ -38,47 +45,34 @@ components:
 	}
 }
 
-func TestRunSkipsBOMExcludedByBomlintConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		selector string
-		bomPath  string
-	}{
-		{name: "exact path", selector: "boms/legacy/bom.yaml", bomPath: "boms/legacy/bom.yaml"},
-		{name: "directory prefix", selector: "boms/legacy", bomPath: "boms/legacy/bom.yaml"},
-		{name: "glob", selector: "boms/*/bom.yaml", bomPath: "boms/legacy/bom.yaml"},
-		{name: "relative prefix", selector: "./boms/legacy/", bomPath: "boms/legacy/bom.yaml"},
-	}
+var _ = Describe("BOM exclusions", func() {
+	DescribeTable("skipping BOMs excluded by .bomlint.yml",
+		func(selector string) {
+			directory := GinkgoT().TempDir()
+			Expect(os.WriteFile(
+				filepath.Join(directory, ".bomlint.yml"),
+				[]byte("excludePaths:\n  - "+selector+"\n"),
+				0o600,
+			)).To(Succeed())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			directory := t.TempDir()
-			if err := os.WriteFile(filepath.Join(directory, ".bomlint.yml"), []byte("excludePaths:\n  - "+tt.selector+"\n"), 0o600); err != nil {
-				t.Fatalf("write lint config: %v", err)
-			}
-
-			path := filepath.Join(directory, filepath.FromSlash(tt.bomPath))
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				t.Fatalf("mkdir BOM directory: %v", err)
-			}
-			if err := os.WriteFile(path, []byte("not a valid BOM\n"), 0o600); err != nil {
-				t.Fatalf("write BOM: %v", err)
-			}
+			bomPath := filepath.Join(directory, "boms", "legacy", "bom.yaml")
+			Expect(os.MkdirAll(filepath.Dir(bomPath), 0o755)).To(Succeed())
+			Expect(os.WriteFile(bomPath, []byte("not a valid BOM\n"), 0o600)).To(Succeed())
 
 			validatorCalled := false
-			err := RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path}, func(_ []images.ImageRef) error {
+			err := RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: bomPath}, func(_ []images.ImageRef) error {
 				validatorCalled = true
 				return nil
 			})
-			if err != nil {
-				t.Fatalf("excluded BOM returned error: %v", err)
-			}
-			if validatorCalled {
-				t.Fatal("validator was called for excluded BOM")
-			}
-		})
-	}
-}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(validatorCalled).To(BeFalse())
+		},
+		Entry("by exact path", "boms/legacy/bom.yaml"),
+		Entry("by directory prefix", "boms/legacy"),
+		Entry("by glob", "boms/*/bom.yaml"),
+		Entry("by normalized relative prefix", "./boms/legacy/"),
+	)
+})
 
 func TestRunEnforcesAllowedRegistriesForImagesAndCharts(t *testing.T) {
 	directory := t.TempDir()

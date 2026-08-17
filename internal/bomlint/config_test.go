@@ -5,7 +5,15 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
+
+func TestBomlint(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "BOM lint config suite")
+}
 
 func TestFindLoadsNearestConfig(t *testing.T) {
 	root := t.TempDir()
@@ -54,34 +62,25 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 	}
 }
 
-func TestMatchesExcludedPath(t *testing.T) {
+var _ = Describe("BOM exclusions", func() {
 	selectors := []string{"boms/legacy", "boms/*/generated.yaml", "./boms/archive/"}
-	tests := []struct {
-		path string
-		want bool
-	}{
-		{path: "boms/legacy/bom.yaml", want: true},
-		{path: "boms/api/generated.yaml", want: true},
-		{path: "boms/archive/bom.json", want: true},
-		{path: "boms/legacy-v2/bom.yaml", want: false},
-		{path: "boms/api/bom.yaml", want: false},
-	}
 
-	for _, tt := range tests {
-		if got := MatchesExcludedPath(tt.path, selectors); got != tt.want {
-			t.Errorf("MatchesExcludedPath(%q) = %t, want %t", tt.path, got, tt.want)
-		}
-	}
-}
+	DescribeTable("matching configured paths",
+		func(target string, expected bool) {
+			Expect(MatchesExcludedPath(target, selectors)).To(Equal(expected))
+		},
+		Entry("matches a directory prefix", "boms/legacy/bom.yaml", true),
+		Entry("matches a glob", "boms/api/generated.yaml", true),
+		Entry("normalizes a relative directory prefix", "boms/archive/bom.json", true),
+		Entry("does not match a similar prefix", "boms/legacy-v2/bom.yaml", false),
+		Entry("does not match an unrelated path", "boms/api/bom.yaml", false),
+	)
 
-func TestConfigExcludesRelativeTarget(t *testing.T) {
-	workingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working directory: %v", err)
-	}
+	It("resolves relative BOM targets", func() {
+		workingDirectory, err := os.Getwd()
+		Expect(err).NotTo(HaveOccurred())
 
-	config := Config{ExcludePaths: []string{"fixtures/legacy"}}
-	if !config.Excludes(workingDirectory, "fixtures/legacy/bom.yaml") {
-		t.Fatal("expected relative target to be excluded")
-	}
-}
+		config := Config{ExcludePaths: []string{"fixtures/legacy"}}
+		Expect(config.Excludes(workingDirectory, "fixtures/legacy/bom.yaml")).To(BeTrue())
+	})
+})
