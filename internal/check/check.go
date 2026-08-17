@@ -32,6 +32,10 @@ func RunWithValidator(logger logging.Logger, cfg Config, validator Validator) er
 	}
 	if foundConfig {
 		logger.Debugf("loaded %s from %s", bomlint.FileName, configRoot)
+		if lintConfig.Excludes(configRoot, cfg.BOMPath) {
+			logger.Debugf("skipping excluded BOM %s", cfg.BOMPath)
+			return nil
+		}
 	}
 
 	file, err := os.Open(cfg.BOMPath)

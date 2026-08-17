@@ -53,3 +53,35 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 		t.Fatal("expected unknown config field to fail")
 	}
 }
+
+func TestMatchesExcludedPath(t *testing.T) {
+	selectors := []string{"boms/legacy", "boms/*/generated.yaml", "./boms/archive/"}
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "boms/legacy/bom.yaml", want: true},
+		{path: "boms/api/generated.yaml", want: true},
+		{path: "boms/archive/bom.json", want: true},
+		{path: "boms/legacy-v2/bom.yaml", want: false},
+		{path: "boms/api/bom.yaml", want: false},
+	}
+
+	for _, tt := range tests {
+		if got := MatchesExcludedPath(tt.path, selectors); got != tt.want {
+			t.Errorf("MatchesExcludedPath(%q) = %t, want %t", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestConfigExcludesRelativeTarget(t *testing.T) {
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+
+	config := Config{ExcludePaths: []string{"fixtures/legacy"}}
+	if !config.Excludes(workingDirectory, "fixtures/legacy/bom.yaml") {
+		t.Fatal("expected relative target to be excluded")
+	}
+}

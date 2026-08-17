@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/codesphere-cloud/bom/internal/bomlint"
 	checkworkflow "github.com/codesphere-cloud/bom/internal/check"
 	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/codesphere-cloud/bom/internal/sbom"
@@ -229,17 +230,5 @@ func (r checkRunner) excludeTargets(targets []string) ([]string, error) {
 }
 
 func (r checkRunner) matchesExcludedTarget(target string) bool {
-	for _, pattern := range r.excludedPaths {
-		if hasGlob(pattern) {
-			if matchesGlob(pattern, target) {
-				return true
-			}
-			continue
-		}
-
-		if matchesPathPrefix(target, pattern) {
-			return true
-		}
-	}
-	return false
+	return bomlint.MatchesExcludedPath(target, r.excludedPaths)
 }
