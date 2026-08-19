@@ -20,6 +20,8 @@ func TestLoadConfigParsesAdditionalImages(t *testing.T) {
 	chartPath := t.TempDir()
 	content := []byte(`
 additionalImages:
+  - key: external
+    image: ghcr.io/example/external:2.0.0
   - resource:
       apiVersion: v1
       kind: ConfigMap
@@ -42,11 +44,19 @@ bomGenerationValues:
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	if len(cfg.AdditionalImages) != 1 {
-		t.Fatalf("expected 1 additional image, got %d", len(cfg.AdditionalImages))
+	if len(cfg.AdditionalImages) != 2 {
+		t.Fatalf("expected 2 additional images, got %d", len(cfg.AdditionalImages))
 	}
 
-	got := cfg.AdditionalImages[0]
+	direct := cfg.AdditionalImages[0]
+	if direct.Key != "external" || direct.Image != "ghcr.io/example/external:2.0.0" {
+		t.Fatalf("unexpected direct image: %#v", direct)
+	}
+	if direct.Resource != (ResourceRef{}) {
+		t.Fatalf("expected direct image resource to be empty, got %#v", direct.Resource)
+	}
+
+	got := cfg.AdditionalImages[1]
 	if got.Resource.APIVersion != "v1" || got.Resource.Kind != "ConfigMap" || got.Resource.Name != "extra-images" {
 		t.Fatalf("unexpected resource: %#v", got.Resource)
 	}

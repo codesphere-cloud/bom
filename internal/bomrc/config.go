@@ -18,7 +18,7 @@ type Config struct {
 }
 
 type AdditionalImage struct {
-	Resource ResourceRef `json:"resource"`
+	Resource ResourceRef `json:"resource,omitempty"`
 	Key      string      `json:"key,omitempty"`
 	Image    string      `json:"image"`
 }

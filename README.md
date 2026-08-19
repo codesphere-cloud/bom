@@ -109,6 +109,11 @@ bomGenerationValues:
     tag: latest
 
 additionalImages:
+  # Literal image references can be included even when they are not in the chart.
+  - key: support-tool
+    image: ghcr.io/acme/support-tool:2.1.0
+
+  # Images can also be selected from non-workload rendered resources.
   - resource:
       apiVersion: v1
       kind: ConfigMap
@@ -125,9 +130,9 @@ imageKeyMappings:
 
 - `bomGenerationValues` provides default Helm values used only for BOM generation
 - CLI- or Action-supplied chart inputs still override those defaults
-- `additionalImages` lets a chart declare extra image references from rendered resources outside the standard workload image fields
-- each `additionalImages` entry selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`
-- `image` is evaluated as a yq-style selector and must resolve to exactly one string image reference
+- `additionalImages` lets a chart declare literal image references that are not present in the chart, or select references from rendered resources outside the standard workload image fields
+- when `resource` is omitted, `image` must be a literal OCI image reference
+- when `resource` is present, it selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`; `image` is evaluated as a yq-style selector and must resolve to exactly one string image reference
 - `key` optionally overrides the BOM key for that configured image
 - `imageKeyMappings` remaps auto-discovered repository keys in `csbom-json` and `csbom-yaml`
 

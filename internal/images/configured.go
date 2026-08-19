@@ -100,10 +100,19 @@ func parseManifestDocument(document *yamlv3.Node) (manifestHeader, any, error) {
 }
 
 func extractConfiguredImage(documents []manifestDocument, entry bomrc.AdditionalImage) (ImageRef, error) {
-	if strings.TrimSpace(entry.Resource.APIVersion) == "" || strings.TrimSpace(entry.Resource.Kind) == "" || strings.TrimSpace(entry.Resource.Name) == "" {
+	apiVersion := strings.TrimSpace(entry.Resource.APIVersion)
+	kind := strings.TrimSpace(entry.Resource.Kind)
+	name := strings.TrimSpace(entry.Resource.Name)
+	image := strings.TrimSpace(entry.Image)
+
+	if apiVersion == "" && kind == "" && name == "" {
+		return directConfiguredImage(image, entry.Key)
+	}
+
+	if apiVersion == "" || kind == "" || name == "" {
 		return ImageRef{}, fmt.Errorf("configured image resource must set apiVersion, kind, and name")
 	}
-	if strings.TrimSpace(entry.Image) == "" {
+	if image == "" {
 		return ImageRef{}, fmt.Errorf("configured image for %s/%s must define an image selector", entry.Resource.Kind, entry.Resource.Name)
 	}
 
@@ -130,6 +139,25 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 
 	ref.Sources = []string{
 		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),
+	}
+	return ref, nil
+}
+
+func directConfiguredImage(image string, key string) (ImageRef, error) {
+	if image == "" {
+		return ImageRef{}, fmt.Errorf("configured image must define an image reference")
+	}
+
+	ref, ok := ParseImageRef(image)
+	if !ok {
+		return ImageRef{}, fmt.Errorf("configured image %q is not a valid OCI image reference", image)
+	}
+	if key = strings.TrimSpace(key); key != "" {
+		ref.Repository = key
+	}
+
+	ref.Sources = []string{
+		fmt.Sprintf("configured directly by .bomrc.yaml/.yml: %s", image),
 	}
 	return ref, nil
 }

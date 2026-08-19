@@ -67,6 +67,7 @@ func TestBOMExtractsImagesFromChart(t *testing.T) {
 	slices.Sort(got)
 
 	want := []string{
+		"ghcr.io/example/external@2.0.0",
 		"registry.k8s.io/coredns/coredns@v1.11.3",
 		"registry.k8s.io/e2e-test-images/agnhost@2.53",
 		"registry.k8s.io/etcd@3.5.15-0",
@@ -76,6 +77,7 @@ func TestBOMExtractsImagesFromChart(t *testing.T) {
 		t.Fatalf("unexpected extracted packages:\nwant: %v\ngot:  %v", want, got)
 	}
 
+	assertPURL(t, doc.Packages, "ghcr.io/example/external", "pkg:oci/ghcr.io/example/external@2.0.0")
 	assertPURL(t, doc.Packages, "registry.k8s.io/coredns/coredns", "pkg:oci/registry.k8s.io/coredns/coredns@v1.11.3")
 	assertPURL(t, doc.Packages, "registry.k8s.io/e2e-test-images/agnhost", "pkg:oci/registry.k8s.io/e2e-test-images/agnhost@2.53")
 	assertPURL(t, doc.Packages, "registry.k8s.io/etcd", "pkg:oci/registry.k8s.io/etcd@3.5.15-0")
