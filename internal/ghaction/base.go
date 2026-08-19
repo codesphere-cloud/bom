@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/bomlint"
 )
@@ -42,7 +43,30 @@ func (r baseRunner) discoverChartDirs() ([]string, error) {
 		return nil, err
 	}
 
+	for target := range targetSet {
+		if isSubchart(target, targetSet) {
+			delete(targetSet, target)
+		}
+	}
+
 	return sortedKeys(targetSet), nil
+}
+
+func isSubchart(target string, chartDirs map[string]struct{}) bool {
+	const chartsDir = "/charts/"
+	for searchFrom := 0; searchFrom < len(target); {
+		relativeIndex := strings.Index(target[searchFrom:], chartsDir)
+		if relativeIndex < 0 {
+			return false
+		}
+
+		index := searchFrom + relativeIndex
+		if _, ok := chartDirs[target[:index]]; ok {
+			return true
+		}
+		searchFrom = index + len(chartsDir)
+	}
+	return false
 }
 
 func (r baseRunner) discoverBOMPaths(defaultOnly bool) ([]string, error) {

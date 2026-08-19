@@ -219,6 +219,7 @@ func TestGenerateResolveTargetsDiscoversCharts(t *testing.T) {
 	repoRoot := t.TempDir()
 	for _, path := range []string{
 		filepath.Join(repoRoot, "charts", "api", "Chart.yaml"),
+		filepath.Join(repoRoot, "charts", "api", "charts", "dependency", "Chart.yaml"),
 		filepath.Join(repoRoot, "charts", "worker", "Chart.yaml"),
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
