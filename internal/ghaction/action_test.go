@@ -864,10 +864,11 @@ func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 		t.Fatalf("write existing output: %v", err)
 	}
 
+	var stdout bytes.Buffer
 	runner := generateRunner{
 		baseRunner: baseRunner{
 			repoRoot: repoRoot,
-			stdout:   io.Discard,
+			stdout:   &stdout,
 			logger:   newTestLogger(false),
 			deps: Dependencies{
 				GenerateBOM: func(_ io.Writer, _ logging.Logger, cfg generateworkflow.Config) error {
@@ -895,6 +896,9 @@ func TestRunGenerateTargetsReportsChangedOutputs(t *testing.T) {
 	if !slices.Equal(changedTargets, []string{"charts/api"}) {
 		t.Fatalf("unexpected changed targets: %v", changedTargets)
 	}
+	if stdout.String() != "after\n" {
+		t.Fatalf("unexpected generated BOM on stdout: %q", stdout.String())
+	}
 }
 
 func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
@@ -911,10 +915,11 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 		t.Fatalf("write existing output: %v", err)
 	}
 
+	var stdout bytes.Buffer
 	runner := generateRunner{
 		baseRunner: baseRunner{
 			repoRoot: repoRoot,
-			stdout:   io.Discard,
+			stdout:   &stdout,
 			logger:   newTestLogger(false),
 			deps: Dependencies{
 				GenerateBOM: func(_ io.Writer, _ logging.Logger, _ generateworkflow.Config) error {
@@ -938,6 +943,9 @@ func TestRunGenerateTargetsReportsUnchangedOutputs(t *testing.T) {
 	}
 	if len(changedTargets) != 0 {
 		t.Fatalf("expected no changed targets, got %v", changedTargets)
+	}
+	if stdout.String() != "stable\n" {
+		t.Fatalf("unexpected generated BOM on stdout: %q", stdout.String())
 	}
 }
 

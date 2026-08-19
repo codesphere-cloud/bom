@@ -129,6 +129,9 @@ func (r generateRunner) runTargets(targets []string) ([]string, []string, []stri
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("read generated output for %s: %w", target, err)
 		}
+		if _, err := r.stdout.Write(after); err != nil {
+			return nil, nil, nil, fmt.Errorf("write generated output for %s to stdout: %w", target, err)
+		}
 
 		if !existedBefore || !slices.Equal(before, after) {
 			r.logger.Infof("generated output changed for chart %s -> %s", target, toSlash(relativeOutputPath))
