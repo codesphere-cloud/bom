@@ -3,243 +3,126 @@ package sbom
 import (
 	"bytes"
 	"encoding/json"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"sigs.k8s.io/yaml"
 )
 
-func TestNewFormatterSupportsCSBOMYAML(t *testing.T) {
-	formatter, err := NewFormatter("csbom")
-	if err != nil {
-		t.Fatalf("NewFormatter returned error: %v", err)
-	}
-
-	if _, ok := formatter.(CSBOMYAMLFormatter); !ok {
-		t.Fatalf("expected CSBOMYAMLFormatter, got %T", formatter)
-	}
+type containerImagesPayload struct {
+	Components map[string]struct {
+		ContainerImages map[string]string `json:"containerImages"`
+	} `json:"components"`
 }
 
-func TestNewFormatterSupportsCSBOMV2YAML(t *testing.T) {
-	formatter, err := NewFormatter("csbom-v2")
-	if err != nil {
-		t.Fatalf("NewFormatter returned error: %v", err)
-	}
-
-	if _, ok := formatter.(CSBOMV2YAMLFormatter); !ok {
-		t.Fatalf("expected CSBOMV2YAMLFormatter, got %T", formatter)
-	}
+type v2Payload struct {
+	Version         string `json:"version"`
+	Name            string `json:"name"`
+	ContainerImages map[string]struct {
+		Ref     string   `json:"ref"`
+		Sources []string `json:"sources"`
+	} `json:"containerImages"`
 }
 
-func TestCSBOMFormatterUsesInternalShape(t *testing.T) {
-	document := Document{
-		Metadata: Metadata{
-			Source: SourceMetadata{
-				ChartName: "e2e-chart",
-			},
+var _ = Describe("NewFormatter", func() {
+	DescribeTable("resolving formatter implementations",
+		func(format string, expected any) {
+			formatter, err := NewFormatter(format)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(formatter).To(BeAssignableToTypeOf(expected))
 		},
-		Components: []Component{
-			{
-				Repository: "ghcr.io/example/api",
-				Reference:  "ghcr.io/example/api:1.2.3",
+		Entry("supports csbom YAML", "csbom", CSBOMYAMLFormatter{}),
+		Entry("supports csbom-v2 YAML", "csbom-v2", CSBOMV2YAMLFormatter{}),
+	)
+})
+
+var _ = Describe("Formatters", func() {
+	var document Document
+
+	BeforeEach(func() {
+		document = Document{
+			Metadata: Metadata{
+				Source: SourceMetadata{
+					ChartName: "e2e-chart",
+				},
 			},
-			{
-				Repository: "busybox",
-				Reference:  "busybox:1.36.1",
+			Components: []Component{
+				{
+					Repository: "ghcr.io/example/api",
+					Reference:  "ghcr.io/example/api:1.2.3",
+					Evidence:   []string{"Deployment/api spec.containers[0]"},
+				},
+				{
+					Repository: "busybox",
+					Reference:  "busybox:1.36.1",
+				},
 			},
-		},
-	}
+		}
+	})
 
-	var buffer bytes.Buffer
-	formatter := CSBOMJSONFormatter{}
-	if err := formatter.Format(&buffer, document); err != nil {
-		t.Fatalf("Format returned error: %v", err)
-	}
+	Context("CSBOMJSONFormatter", func() {
+		It("uses the internal csbom shape", func() {
+			var buffer bytes.Buffer
+			formatter := CSBOMJSONFormatter{}
+			Expect(formatter.Format(&buffer, document)).To(Succeed())
 
-	var payload struct {
-		Components map[string]struct {
-			ContainerImages map[string]string `json:"containerImages"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
-		t.Fatalf("decode csbom output: %v", err)
-	}
+			var payload containerImagesPayload
+			Expect(json.Unmarshal(buffer.Bytes(), &payload)).To(Succeed())
 
-	component, ok := payload.Components["e2e-chart"]
-	if !ok {
-		t.Fatalf("expected e2e-chart component, got %v", payload.Components)
-	}
+			component, ok := payload.Components["e2e-chart"]
+			Expect(ok).To(BeTrue())
+			Expect(component.ContainerImages["ghcr.io/example/api"]).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(component.ContainerImages["busybox"]).To(Equal("busybox:1.36.1"))
+		})
+	})
 
-	if got := component.ContainerImages["ghcr.io/example/api"]; got != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected api image: %q", got)
-	}
+	Context("CSBOMYAMLFormatter", func() {
+		It("uses the internal csbom shape", func() {
+			var buffer bytes.Buffer
+			formatter := CSBOMYAMLFormatter{}
+			Expect(formatter.Format(&buffer, document)).To(Succeed())
 
-	if got := component.ContainerImages["busybox"]; got != "busybox:1.36.1" {
-		t.Fatalf("unexpected busybox image: %q", got)
-	}
-}
+			var payload containerImagesPayload
+			Expect(yaml.Unmarshal(buffer.Bytes(), &payload)).To(Succeed())
 
-func TestCSBOMYAMLFormatterUsesInternalShape(t *testing.T) {
-	document := Document{
-		Metadata: Metadata{
-			Source: SourceMetadata{
-				ChartName: "e2e-chart",
-			},
-		},
-		Components: []Component{
-			{
-				Repository: "ghcr.io/example/api",
-				Reference:  "ghcr.io/example/api:1.2.3",
-			},
-			{
-				Repository: "busybox",
-				Reference:  "busybox:1.36.1",
-			},
-		},
-	}
+			component, ok := payload.Components["e2e-chart"]
+			Expect(ok).To(BeTrue())
+			Expect(component.ContainerImages["ghcr.io/example/api"]).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(component.ContainerImages["busybox"]).To(Equal("busybox:1.36.1"))
+		})
+	})
 
-	var buffer bytes.Buffer
-	formatter := CSBOMYAMLFormatter{}
-	if err := formatter.Format(&buffer, document); err != nil {
-		t.Fatalf("Format returned error: %v", err)
-	}
+	Context("CSBOMV2JSONFormatter", func() {
+		It("uses the internal csbom v2 shape", func() {
+			var buffer bytes.Buffer
+			formatter := CSBOMV2JSONFormatter{}
+			Expect(formatter.Format(&buffer, document)).To(Succeed())
 
-	var payload struct {
-		Components map[string]struct {
-			ContainerImages map[string]string `json:"containerImages"`
-		} `json:"components"`
-	}
-	if err := yaml.Unmarshal(buffer.Bytes(), &payload); err != nil {
-		t.Fatalf("decode csbom yaml output: %v", err)
-	}
+			var payload v2Payload
+			Expect(json.Unmarshal(buffer.Bytes(), &payload)).To(Succeed())
 
-	component, ok := payload.Components["e2e-chart"]
-	if !ok {
-		t.Fatalf("expected e2e-chart component, got %v", payload.Components)
-	}
+			Expect(payload.Version).To(Equal(csbomV2Version))
+			Expect(payload.Name).To(Equal("e2e-chart"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Ref).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Sources).To(Equal([]string{"Deployment/api spec.containers[0]"}))
+			Expect(payload.ContainerImages["busybox"].Ref).To(Equal("busybox:1.36.1"))
+		})
+	})
 
-	if got := component.ContainerImages["ghcr.io/example/api"]; got != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected api image: %q", got)
-	}
+	Context("CSBOMV2YAMLFormatter", func() {
+		It("uses the internal csbom v2 shape", func() {
+			var buffer bytes.Buffer
+			formatter := CSBOMV2YAMLFormatter{}
+			Expect(formatter.Format(&buffer, document)).To(Succeed())
 
-	if got := component.ContainerImages["busybox"]; got != "busybox:1.36.1" {
-		t.Fatalf("unexpected busybox image: %q", got)
-	}
-}
+			var payload v2Payload
+			Expect(yaml.Unmarshal(buffer.Bytes(), &payload)).To(Succeed())
 
-func TestCSBOMV2JSONFormatterUsesInternalShape(t *testing.T) {
-	document := Document{
-		Metadata: Metadata{
-			Source: SourceMetadata{
-				ChartName: "e2e-chart",
-			},
-		},
-		Components: []Component{
-			{
-				Repository: "ghcr.io/example/api",
-				Reference:  "ghcr.io/example/api:1.2.3",
-				Evidence:   []string{"Deployment/api spec.containers[0]"},
-			},
-			{
-				Repository: "busybox",
-				Reference:  "busybox:1.36.1",
-			},
-		},
-	}
-
-	var buffer bytes.Buffer
-	formatter := CSBOMV2JSONFormatter{}
-	if err := formatter.Format(&buffer, document); err != nil {
-		t.Fatalf("Format returned error: %v", err)
-	}
-
-	var payload struct {
-		Version         string `json:"version"`
-		Name            string `json:"name"`
-		ContainerImages map[string]struct {
-			Ref     string   `json:"ref"`
-			Sources []string `json:"sources"`
-		} `json:"containerImages"`
-	}
-	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
-		t.Fatalf("decode csbom v2 output: %v", err)
-	}
-
-	if payload.Version != csbomV2Version {
-		t.Fatalf("unexpected version: %q", payload.Version)
-	}
-
-	if payload.Name != "e2e-chart" {
-		t.Fatalf("unexpected name: %q", payload.Name)
-	}
-
-	if got := payload.ContainerImages["ghcr.io/example/api"].Ref; got != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected api image: %q", got)
-	}
-
-	if got := payload.ContainerImages["ghcr.io/example/api"].Sources; len(got) != 1 || got[0] != "Deployment/api spec.containers[0]" {
-		t.Fatalf("unexpected api sources: %#v", got)
-	}
-
-	if got := payload.ContainerImages["busybox"].Ref; got != "busybox:1.36.1" {
-		t.Fatalf("unexpected busybox image: %q", got)
-	}
-}
-
-func TestCSBOMV2YAMLFormatterUsesInternalShape(t *testing.T) {
-	document := Document{
-		Metadata: Metadata{
-			Source: SourceMetadata{
-				ChartName: "e2e-chart",
-			},
-		},
-		Components: []Component{
-			{
-				Repository: "ghcr.io/example/api",
-				Reference:  "ghcr.io/example/api:1.2.3",
-				Evidence:   []string{"Deployment/api spec.containers[0]"},
-			},
-			{
-				Repository: "busybox",
-				Reference:  "busybox:1.36.1",
-			},
-		},
-	}
-
-	var buffer bytes.Buffer
-	formatter := CSBOMV2YAMLFormatter{}
-	if err := formatter.Format(&buffer, document); err != nil {
-		t.Fatalf("Format returned error: %v", err)
-	}
-
-	var payload struct {
-		Version         string `json:"version"`
-		Name            string `json:"name"`
-		ContainerImages map[string]struct {
-			Ref     string   `json:"ref"`
-			Sources []string `json:"sources"`
-		} `json:"containerImages"`
-	}
-	if err := yaml.Unmarshal(buffer.Bytes(), &payload); err != nil {
-		t.Fatalf("decode csbom v2 yaml output: %v", err)
-	}
-
-	if payload.Version != csbomV2Version {
-		t.Fatalf("unexpected version: %q", payload.Version)
-	}
-
-	if payload.Name != "e2e-chart" {
-		t.Fatalf("unexpected name: %q", payload.Name)
-	}
-
-	if got := payload.ContainerImages["ghcr.io/example/api"].Ref; got != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected api image: %q", got)
-	}
-
-	if got := payload.ContainerImages["ghcr.io/example/api"].Sources; len(got) != 1 || got[0] != "Deployment/api spec.containers[0]" {
-		t.Fatalf("unexpected api sources: %#v", got)
-	}
-
-	if got := payload.ContainerImages["busybox"].Ref; got != "busybox:1.36.1" {
-		t.Fatalf("unexpected busybox image: %q", got)
-	}
-}
+			Expect(payload.Version).To(Equal(csbomV2Version))
+			Expect(payload.Name).To(Equal("e2e-chart"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Ref).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Sources).To(Equal([]string{"Deployment/api spec.containers[0]"}))
+			Expect(payload.ContainerImages["busybox"].Ref).To(Equal("busybox:1.36.1"))
+		})
+	})
+})

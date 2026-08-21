@@ -2,13 +2,15 @@ package images
 
 import (
 	"slices"
-	"testing"
 
 	"github.com/codesphere-cloud/bom/internal/bomrc"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestExtractConfigured(t *testing.T) {
-	manifest := []byte(`
+var _ = Describe("ExtractConfigured", func() {
+	It("extracts configured images referenced from a manifest", func() {
+		manifest := []byte(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,97 +24,83 @@ data:
       image: ghcr.io/acme/logs:7.8.9
 `)
 
-	refs, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+		refs, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data.primary`},
 			},
-			Image: bomrc.ImageValue{Literal: `.data.primary`},
-		},
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Key:   "metrics",
+				Image: bomrc.ImageValue{Literal: `.data.sidecars[] | select(.name == "metrics") | .image`},
 			},
-			Key:   "metrics",
-			Image: bomrc.ImageValue{Literal: `.data.sidecars[] | select(.name == "metrics") | .image`},
-		},
-	}, ExtractConfiguredOptions{})
-	if err != nil {
-		t.Fatalf("ExtractConfigured returned error: %v", err)
-	}
+		}, ExtractConfiguredOptions{})
+		Expect(err).NotTo(HaveOccurred())
 
-	got := []string{refs[0].Reference, refs[1].Reference}
-	slices.Sort(got)
+		got := []string{refs[0].Reference, refs[1].Reference}
+		slices.Sort(got)
 
-	want := []string{
-		"ghcr.io/acme/metrics:4.5.6",
-		"ghcr.io/acme/primary:1.2.3",
-	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("unexpected refs:\nwant: %v\ngot:  %v", want, got)
-	}
-	for _, ref := range refs {
-		if ref.Reference == "ghcr.io/acme/metrics:4.5.6" && ref.Repository != "metrics" {
-			t.Fatalf("expected configured key override, got repository %q", ref.Repository)
+		want := []string{
+			"ghcr.io/acme/metrics:4.5.6",
+			"ghcr.io/acme/primary:1.2.3",
 		}
-	}
-}
+		Expect(slices.Equal(got, want)).To(BeTrue())
 
-func TestExtractConfiguredSupportsDirectImageReferences(t *testing.T) {
-	refs, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
-		{
-			Image: bomrc.ImageValue{Literal: "ghcr.io/acme/external:1.2.3"},
-		},
-		{
-			Key:   "support-tool",
-			Image: bomrc.ImageValue{Literal: "docker.io/acme/support-tool:4.5.6"},
-		},
-	}, ExtractConfiguredOptions{ValidateExists: true})
-	if err != nil {
-		t.Fatalf("ExtractConfigured returned error: %v", err)
-	}
+		for _, ref := range refs {
+			if ref.Reference == "ghcr.io/acme/metrics:4.5.6" {
+				Expect(ref.Repository).To(Equal("metrics"))
+			}
+		}
+	})
 
-	if len(refs) != 2 {
-		t.Fatalf("expected 2 image references, got %d", len(refs))
-	}
-	if refs[0].Reference != "ghcr.io/acme/external:1.2.3" || refs[0].Repository != "ghcr.io/acme/external" {
-		t.Fatalf("unexpected direct image reference: %#v", refs[0])
-	}
-	if refs[1].Reference != "acme/support-tool:4.5.6" || refs[1].Repository != "support-tool" {
-		t.Fatalf("unexpected keyed direct image reference: %#v", refs[1])
-	}
-	if len(refs[0].Sources) != 1 || refs[0].Sources[0] != "configured directly by .bomrc.yaml/.yml: ghcr.io/acme/external:1.2.3" {
-		t.Fatalf("unexpected direct image sources: %#v", refs[0].Sources)
-	}
-}
-
-func TestExtractConfiguredSupportsStructuredDirectImageReference(t *testing.T) {
-	refs, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
-		{
-			Image: bomrc.ImageValue{
-				Repository: "ghcr.io/acme/external",
-				Tag:        "1.2.3",
+	It("supports direct image references", func() {
+		refs, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
+			{
+				Image: bomrc.ImageValue{Literal: "ghcr.io/acme/external:1.2.3"},
 			},
-		},
-	}, ExtractConfiguredOptions{ValidateExists: true})
-	if err != nil {
-		t.Fatalf("ExtractConfigured returned error: %v", err)
-	}
+			{
+				Key:   "support-tool",
+				Image: bomrc.ImageValue{Literal: "docker.io/acme/support-tool:4.5.6"},
+			},
+		}, ExtractConfiguredOptions{ValidateExists: true})
+		Expect(err).NotTo(HaveOccurred())
 
-	if len(refs) != 1 {
-		t.Fatalf("expected 1 image reference, got %d", len(refs))
-	}
-	if refs[0].Reference != "ghcr.io/acme/external:1.2.3" || refs[0].Repository != "ghcr.io/acme/external" {
-		t.Fatalf("unexpected structured image reference: %#v", refs[0])
-	}
-}
+		Expect(refs).To(HaveLen(2))
+		Expect(refs[0].Reference).To(Equal("ghcr.io/acme/external:1.2.3"))
+		Expect(refs[0].Repository).To(Equal("ghcr.io/acme/external"))
+		Expect(refs[1].Reference).To(Equal("acme/support-tool:4.5.6"))
+		Expect(refs[1].Repository).To(Equal("support-tool"))
 
-func TestExtractConfiguredSupportsStructuredImageWithLiteralFieldsAndResource(t *testing.T) {
-	refs, err := ExtractConfigured([]byte(`
+		Expect(refs[0].Sources).To(HaveLen(1))
+		Expect(refs[0].Sources[0]).To(Equal("configured directly by .bomrc.yaml/.yml: ghcr.io/acme/external:1.2.3"))
+	})
+
+	It("supports a structured direct image reference", func() {
+		refs, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
+			{
+				Image: bomrc.ImageValue{
+					Repository: "ghcr.io/acme/external",
+					Tag:        "1.2.3",
+				},
+			},
+		}, ExtractConfiguredOptions{ValidateExists: true})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(refs).To(HaveLen(1))
+		Expect(refs[0].Reference).To(Equal("ghcr.io/acme/external:1.2.3"))
+		Expect(refs[0].Repository).To(Equal("ghcr.io/acme/external"))
+	})
+
+	It("supports a structured image with literal fields and a resource selector", func() {
+		refs, err := ExtractConfigured([]byte(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -120,28 +108,25 @@ metadata:
 data:
   primary: ghcr.io/acme/primary:1.2.3
 `), []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{
+					Repository: "ghcr.io/acme/external",
+					Tag:        "1.2.3",
+				},
 			},
-			Image: bomrc.ImageValue{
-				Repository: "ghcr.io/acme/external",
-				Tag:        "1.2.3",
-			},
-		},
-	}, ExtractConfiguredOptions{})
-	if err != nil {
-		t.Fatalf("ExtractConfigured returned error: %v", err)
-	}
-	if len(refs) != 1 || refs[0].Reference != "ghcr.io/acme/external:1.2.3" {
-		t.Fatalf("unexpected refs: %#v", refs)
-	}
-}
+		}, ExtractConfiguredOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refs).To(HaveLen(1))
+		Expect(refs[0].Reference).To(Equal("ghcr.io/acme/external:1.2.3"))
+	})
 
-func TestExtractConfiguredSupportsStructuredImageWithSelectorFields(t *testing.T) {
-	manifest := []byte(`
+	It("supports a structured image with selector fields", func() {
+		manifest := []byte(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -151,51 +136,41 @@ data:
   digest: sha256:1234567890123456789012345678901234567890123456789012345678901234
 `)
 
-	refs, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+		refs, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{
+					Repository: "ghcr.io/acme/external",
+					Tag:        ".data.tag",
+				},
 			},
-			Image: bomrc.ImageValue{
-				Repository: "ghcr.io/acme/external",
-				Tag:        ".data.tag",
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Key: "by-digest",
+				Image: bomrc.ImageValue{
+					Repository: "ghcr.io/acme/external",
+					Digest:     ".data.digest",
+				},
 			},
-		},
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
-			},
-			Key: "by-digest",
-			Image: bomrc.ImageValue{
-				Repository: "ghcr.io/acme/external",
-				Digest:     ".data.digest",
-			},
-		},
-	}, ExtractConfiguredOptions{})
-	if err != nil {
-		t.Fatalf("ExtractConfigured returned error: %v", err)
-	}
-	if len(refs) != 2 {
-		t.Fatalf("expected 2 refs, got %d: %#v", len(refs), refs)
-	}
+		}, ExtractConfiguredOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refs).To(HaveLen(2))
 
-	if refs[0].Reference != "ghcr.io/acme/external:1.2.3" {
-		t.Fatalf("unexpected tag-selector ref: %#v", refs[0])
-	}
-	if refs[1].Reference != "ghcr.io/acme/external@sha256:1234567890123456789012345678901234567890123456789012345678901234" {
-		t.Fatalf("unexpected digest-selector ref: %#v", refs[1])
-	}
-	if refs[1].Repository != "by-digest" {
-		t.Fatalf("expected key override, got repository %q", refs[1].Repository)
-	}
-}
+		Expect(refs[0].Reference).To(Equal("ghcr.io/acme/external:1.2.3"))
+		Expect(refs[1].Reference).To(Equal("ghcr.io/acme/external@sha256:1234567890123456789012345678901234567890123456789012345678901234"))
+		Expect(refs[1].Repository).To(Equal("by-digest"))
+	})
 
-func TestExtractConfiguredErrorsWhenStructuredSelectorFieldMissing(t *testing.T) {
-	manifest := []byte(`
+	It("errors when a structured selector field is missing", func() {
+		manifest := []byte(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -203,47 +178,41 @@ metadata:
 data: {}
 `)
 
-	_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+		_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{
+					Repository: "ghcr.io/acme/external",
+					Tag:        ".data.missing",
+				},
 			},
-			Image: bomrc.ImageValue{
-				Repository: "ghcr.io/acme/external",
-				Tag:        ".data.missing",
+		}, ExtractConfiguredOptions{ValidateExists: true})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects an invalid direct image reference", func() {
+		_, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
+			{Image: bomrc.ImageValue{Literal: "https://example.com/image"}},
+		}, ExtractConfiguredOptions{})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects a partial resource selector", func() {
+		_, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{Kind: "ConfigMap"},
+				Image:    bomrc.ImageValue{Literal: "ghcr.io/acme/external:1.2.3"},
 			},
-		},
-	}, ExtractConfiguredOptions{ValidateExists: true})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+		}, ExtractConfiguredOptions{})
+		Expect(err).To(HaveOccurred())
+	})
 
-func TestExtractConfiguredRejectsInvalidDirectImageReference(t *testing.T) {
-	_, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
-		{Image: bomrc.ImageValue{Literal: "https://example.com/image"}},
-	}, ExtractConfiguredOptions{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestExtractConfiguredRejectsPartialResource(t *testing.T) {
-	_, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{Kind: "ConfigMap"},
-			Image:    bomrc.ImageValue{Literal: "ghcr.io/acme/external:1.2.3"},
-		},
-	}, ExtractConfiguredOptions{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestExtractConfiguredErrorsWhenSelectorMatchesNothing(t *testing.T) {
-	manifest := []byte(`
+	It("errors when a selector matches nothing", func() {
+		manifest := []byte(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -254,17 +223,16 @@ data:
       image: ghcr.io/acme/metrics:4.5.6
 `)
 
-	_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
-		{
-			Resource: bomrc.ResourceRef{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "extra-images",
+		_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data.sidecars[] | select(.name == "logs") | .image`},
 			},
-			Image: bomrc.ImageValue{Literal: `.data.sidecars[] | select(.name == "logs") | .image`},
-		},
-	}, ExtractConfiguredOptions{ValidateExists: true})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+		}, ExtractConfiguredOptions{ValidateExists: true})
+		Expect(err).To(HaveOccurred())
+	})
+})

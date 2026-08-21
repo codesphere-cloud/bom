@@ -4,21 +4,26 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestLoadMissingConfigReturnsEmpty(t *testing.T) {
-	cfg, err := Load(t.TempDir())
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if len(cfg.AdditionalImages) != 0 {
-		t.Fatalf("expected no additional images, got %d", len(cfg.AdditionalImages))
-	}
+func TestBomrc(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "BOM RC config suite")
 }
 
-func TestLoadConfigParsesAdditionalImages(t *testing.T) {
-	chartPath := t.TempDir()
-	content := []byte(`
+var _ = Describe("Load", func() {
+	It("returns an empty config when no config file exists", func() {
+		cfg, err := Load(GinkgoT().TempDir())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.AdditionalImages).To(BeEmpty())
+	})
+
+	It("parses additional images from the config file", func() {
+		chartPath := GinkgoT().TempDir()
+		content := []byte(`
 additionalImages:
   - key: external
     image: ghcr.io/example/external:2.0.0
@@ -35,56 +40,35 @@ bomGenerationValues:
     repository: ghcr.io/example/api
     tag: latest
 `)
-	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644)).To(Succeed())
 
-	cfg, err := Load(chartPath)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+		cfg, err := Load(chartPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	if len(cfg.AdditionalImages) != 2 {
-		t.Fatalf("expected 2 additional images, got %d", len(cfg.AdditionalImages))
-	}
+		Expect(cfg.AdditionalImages).To(HaveLen(2))
 
-	direct := cfg.AdditionalImages[0]
-	if direct.Key != "external" || direct.Image.Literal != "ghcr.io/example/external:2.0.0" {
-		t.Fatalf("unexpected direct image: %#v", direct)
-	}
-	if direct.Resource != (ResourceRef{}) {
-		t.Fatalf("expected direct image resource to be empty, got %#v", direct.Resource)
-	}
+		direct := cfg.AdditionalImages[0]
+		Expect(direct.Key).To(Equal("external"))
+		Expect(direct.Image.Literal).To(Equal("ghcr.io/example/external:2.0.0"))
+		Expect(direct.Resource).To(Equal(ResourceRef{}))
 
-	got := cfg.AdditionalImages[1]
-	if got.Resource.APIVersion != "v1" || got.Resource.Kind != "ConfigMap" || got.Resource.Name != "extra-images" {
-		t.Fatalf("unexpected resource: %#v", got.Resource)
-	}
-	if got.Key != "sidecar" {
-		t.Fatalf("unexpected configured key: %q", got.Key)
-	}
-	if got.Image.Literal != ".data.sidecar" {
-		t.Fatalf("unexpected image selector: %q", got.Image.Literal)
-	}
-	if cfg.ImageKeyMappings["ghcr.io/example/api"] != "api" {
-		t.Fatalf("unexpected image key mapping: %#v", cfg.ImageKeyMappings)
-	}
+		got := cfg.AdditionalImages[1]
+		Expect(got.Resource.APIVersion).To(Equal("v1"))
+		Expect(got.Resource.Kind).To(Equal("ConfigMap"))
+		Expect(got.Resource.Name).To(Equal("extra-images"))
+		Expect(got.Key).To(Equal("sidecar"))
+		Expect(got.Image.Literal).To(Equal(".data.sidecar"))
+		Expect(cfg.ImageKeyMappings).To(HaveKeyWithValue("ghcr.io/example/api", "api"))
 
-	imageValues, ok := cfg.BOMGenerationValues["image"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected nested image generation values, got %#v", cfg.BOMGenerationValues["image"])
-	}
-	if imageValues["repository"] != "ghcr.io/example/api" {
-		t.Fatalf("unexpected dummy repository: %#v", imageValues["repository"])
-	}
-	if imageValues["tag"] != "latest" {
-		t.Fatalf("unexpected dummy tag: %#v", imageValues["tag"])
-	}
-}
+		imageValues, ok := cfg.BOMGenerationValues["image"].(map[string]any)
+		Expect(ok).To(BeTrue(), "expected nested image generation values, got %#v", cfg.BOMGenerationValues["image"])
+		Expect(imageValues["repository"]).To(Equal("ghcr.io/example/api"))
+		Expect(imageValues["tag"]).To(Equal("latest"))
+	})
 
-func TestLoadConfigParsesStructuredAdditionalImage(t *testing.T) {
-	chartPath := t.TempDir()
-	content := []byte(`
+	It("parses a structured additional image", func() {
+		chartPath := GinkgoT().TempDir()
+		content := []byte(`
 additionalImages:
   - key: external
     image:
@@ -92,53 +76,26 @@ additionalImages:
       tag: "2.0.0"
       digest: sha256:1234567890123456789012345678901234567890123456789012345678901234
 `)
-	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644)).To(Succeed())
 
-	cfg, err := Load(chartPath)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+		cfg, err := Load(chartPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	if len(cfg.AdditionalImages) != 1 {
-		t.Fatalf("expected 1 additional image, got %d", len(cfg.AdditionalImages))
-	}
+		Expect(cfg.AdditionalImages).To(HaveLen(1))
 
-	got := cfg.AdditionalImages[0].Image
-	if got.Repository != "ghcr.io/example/external" || got.Tag != "2.0.0" || got.Digest != "sha256:1234567890123456789012345678901234567890123456789012345678901234" {
-		t.Fatalf("unexpected structured image: %#v", got)
-	}
+		got := cfg.AdditionalImages[0].Image
+		Expect(got.Repository).To(Equal("ghcr.io/example/external"))
+		Expect(got.Tag).To(Equal("2.0.0"))
+		Expect(got.Digest).To(Equal("sha256:1234567890123456789012345678901234567890123456789012345678901234"))
 
-	ref, ok := got.Ref()
-	if !ok {
-		t.Fatal("expected Ref() to succeed")
-	}
-	want := "ghcr.io/example/external:2.0.0@sha256:1234567890123456789012345678901234567890123456789012345678901234"
-	if ref != want {
-		t.Fatalf("unexpected ref: got %q, want %q", ref, want)
-	}
-}
+		ref, ok := got.Ref()
+		Expect(ok).To(BeTrue(), "expected Ref() to succeed")
+		Expect(ref).To(Equal("ghcr.io/example/external:2.0.0@sha256:1234567890123456789012345678901234567890123456789012345678901234"))
+	})
 
-func TestImageValueRejectsMissingTagAndDigest(t *testing.T) {
-	var v ImageValue
-	err := v.UnmarshalJSON([]byte(`{"repository":"ghcr.io/example/external"}`))
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestImageValueRejectsMissingRepository(t *testing.T) {
-	var v ImageValue
-	err := v.UnmarshalJSON([]byte(`{"tag":"2.0.0"}`))
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestLoadSupportsYAMLConfigName(t *testing.T) {
-	chartPath := t.TempDir()
-	content := []byte(`
+	It("supports the YAML config file name", func() {
+		chartPath := GinkgoT().TempDir()
+		content := []byte(`
 additionalImages:
   - resource:
       apiVersion: v1
@@ -146,43 +103,44 @@ additionalImages:
       name: extra-images
     image: .data.sidecar
 `)
-	if err := os.WriteFile(filepath.Join(chartPath, fileNames[1]), content, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[1]), content, 0o644)).To(Succeed())
 
-	cfg, err := Load(chartPath)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+		cfg, err := Load(chartPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	if len(cfg.AdditionalImages) != 1 {
-		t.Fatalf("expected 1 additional image, got %d", len(cfg.AdditionalImages))
-	}
-}
+		Expect(cfg.AdditionalImages).To(HaveLen(1))
+	})
 
-func TestLoadPrefersYMLWhenBothFilesExist(t *testing.T) {
-	chartPath := t.TempDir()
-	ymlContent := []byte(`
+	It("prefers .bomrc.yml when both files exist", func() {
+		chartPath := GinkgoT().TempDir()
+		ymlContent := []byte(`
 bomGenerationValues:
   marker: yml
 `)
-	yamlContent := []byte(`
+		yamlContent := []byte(`
 bomGenerationValues:
   marker: yaml
 `)
-	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), ymlContent, 0o644); err != nil {
-		t.Fatalf("write yml config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(chartPath, fileNames[1]), yamlContent, 0o644); err != nil {
-		t.Fatalf("write yaml config: %v", err)
-	}
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[0]), ymlContent, 0o644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[1]), yamlContent, 0o644)).To(Succeed())
 
-	cfg, err := Load(chartPath)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+		cfg, err := Load(chartPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	if cfg.BOMGenerationValues["marker"] != "yml" {
-		t.Fatalf("expected .bomrc.yml to win, got %#v", cfg.BOMGenerationValues["marker"])
-	}
-}
+		Expect(cfg.BOMGenerationValues["marker"]).To(Equal("yml"), "expected .bomrc.yml to win, got %#v", cfg.BOMGenerationValues["marker"])
+	})
+})
+
+var _ = Describe("ImageValue", func() {
+	It("rejects a value missing both tag and digest", func() {
+		var v ImageValue
+		err := v.UnmarshalJSON([]byte(`{"repository":"ghcr.io/example/external"}`))
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects a value missing repository", func() {
+		var v ImageValue
+		err := v.UnmarshalJSON([]byte(`{"tag":"2.0.0"}`))
+		Expect(err).To(HaveOccurred())
+	})
+})

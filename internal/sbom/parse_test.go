@@ -2,37 +2,66 @@ package sbom
 
 import (
 	"strings"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestParseCSBOMYAML(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
+var _ = Describe("Parse", func() {
+	Context("csbom v1 format", func() {
+		It("parses YAML with container images", func() {
+			document, err := Parse(strings.NewReader(`
 components:
   chart:
     containerImages:
       ghcr.io/example/api: ghcr.io/example/api:1.2.3
       quay.io/example/worker: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 `), "csbom-yaml")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+			Expect(err).NotTo(HaveOccurred())
 
-	got := ImageRefs(document)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 image refs, got %d", len(got))
-	}
+			got := ImageRefs(document)
+			Expect(got).To(HaveLen(2))
+			Expect(got[0].Reference).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(got[1].Reference).To(Equal("quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+		})
 
-	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected first ref: %q", got[0].Reference)
-	}
+		It("includes Helm chart OCI refs", func() {
+			document, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+    files:
+      dependency:
+        ociRef: oci://registry.example.com/charts/dependency:2.0.0
+`), "csbom")
+			Expect(err).NotTo(HaveOccurred())
 
-	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
-		t.Fatalf("unexpected second ref: %q", got[1].Reference)
-	}
-}
+			refs := OCIRefs(document)
+			Expect(refs).To(HaveLen(2))
+			Expect(document.Components[1].Type).To(Equal(ComponentTypeHelmChart))
+			Expect(document.Components[1].Reference).To(Equal("registry.example.com/charts/dependency:2.0.0"))
+		})
 
-func TestParseCSBOMV2YAML(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
+		It("skips Helm chart refs without an OCI scheme", func() {
+			document, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+    files:
+      dependency:
+        ociRef: registry.example.com/charts/dependency:2.0.0
+`), "csbom")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(document.Components).To(HaveLen(1))
+			Expect(document.Components[0].Type).To(Equal(ComponentTypeOCIImage))
+		})
+	})
+
+	Context("csbom v2 format", func() {
+		It("parses YAML with container images and evidence", func() {
+			document, err := Parse(strings.NewReader(`
 version: "2"
 name: chart
 containerImages:
@@ -43,77 +72,18 @@ containerImages:
   quay.io/example/worker:
     ref: quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 `), "csbom-v2-yaml")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+			Expect(err).NotTo(HaveOccurred())
 
-	got := ImageRefs(document)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 image refs, got %d", len(got))
-	}
+			got := ImageRefs(document)
+			Expect(got).To(HaveLen(2))
+			Expect(got[0].Reference).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(got[1].Reference).To(Equal("quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 
-	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected first ref: %q", got[0].Reference)
-	}
+			Expect(document.Components[0].Evidence).To(Equal([]string{"Deployment/api spec.containers[0]"}))
+		})
 
-	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
-		t.Fatalf("unexpected second ref: %q", got[1].Reference)
-	}
-
-	if len(document.Components[0].Evidence) != 1 || document.Components[0].Evidence[0] != "Deployment/api spec.containers[0]" {
-		t.Fatalf("unexpected evidence: %#v", document.Components[0].Evidence)
-	}
-}
-
-func TestParseCSBOMV2WithoutOCIReferences(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
-version: "2"
-name: empty-chart
-`), "csbom-v2")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
-
-	if len(document.Components) != 0 {
-		t.Fatalf("expected no components, got %#v", document.Components)
-	}
-	if len(OCIRefs(document)) != 0 {
-		t.Fatalf("expected no OCI refs, got %#v", OCIRefs(document))
-	}
-}
-
-func TestParseDoesNotTreatArbitraryYAMLAsEmptyCSBOMV2(t *testing.T) {
-	_, err := Parse(strings.NewReader(`
-replicaCount: 2
-image:
-  repository: ghcr.io/example/api
-`), "csbom-v2")
-	if err == nil {
-		t.Fatal("expected unsupported YAML to fail")
-	}
-}
-
-func TestParseUsesOnlyConfiguredFormat(t *testing.T) {
-	_, err := Parse(strings.NewReader(`
-components:
-  chart:
-    containerImages:
-      ghcr.io/example/api: ghcr.io/example/api:1.2.3
-`), "csbom-v2")
-	if err == nil {
-		t.Fatal("expected csbom input parsed as csbom-v2 to fail")
-	}
-}
-
-func TestParseRejectsUnsupportedFormat(t *testing.T) {
-	_, err := Parse(strings.NewReader("{}"), "auto")
-	if err == nil || !strings.Contains(err.Error(), `unsupported bom format "auto"`) {
-		t.Fatalf("expected unsupported format error, got %v", err)
-	}
-}
-
-func TestParseCSBOMV2JSON(t *testing.T) {
-	document, err := Parse(strings.NewReader(`{
+		It("parses JSON with container images and evidence", func() {
+			document, err := Parse(strings.NewReader(`{
   "version": "2",
   "name": "chart",
   "containerImages": {
@@ -126,56 +96,38 @@ func TestParseCSBOMV2JSON(t *testing.T) {
     }
   }
 }`), "csbom-v2-json")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+			Expect(err).NotTo(HaveOccurred())
 
-	got := ImageRefs(document)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 image refs, got %d", len(got))
-	}
+			got := ImageRefs(document)
+			Expect(got).To(HaveLen(2))
+			Expect(got[0].Reference).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(got[1].Reference).To(Equal("quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 
-	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected first ref: %q", got[0].Reference)
-	}
+			Expect(document.Components[0].Evidence).To(Equal([]string{"Deployment/api spec.containers[0]"}))
+		})
 
-	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
-		t.Fatalf("unexpected second ref: %q", got[1].Reference)
-	}
+		It("parses without any OCI references", func() {
+			document, err := Parse(strings.NewReader(`
+version: "2"
+name: empty-chart
+`), "csbom-v2")
+			Expect(err).NotTo(HaveOccurred())
 
-	if len(document.Components[0].Evidence) != 1 || document.Components[0].Evidence[0] != "Deployment/api spec.containers[0]" {
-		t.Fatalf("unexpected evidence: %#v", document.Components[0].Evidence)
-	}
-}
+			Expect(document.Components).To(BeEmpty())
+			Expect(OCIRefs(document)).To(BeEmpty())
+		})
 
-func TestParseCSBOMIncludesHelmChartOCIRefs(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
-components:
-  chart:
-    containerImages:
-      ghcr.io/example/api: ghcr.io/example/api:1.2.3
-    files:
-      dependency:
-        ociRef: oci://registry.example.com/charts/dependency:2.0.0
-`), "csbom")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+		It("does not treat arbitrary YAML as an empty csbom v2 document", func() {
+			_, err := Parse(strings.NewReader(`
+replicaCount: 2
+image:
+  repository: ghcr.io/example/api
+`), "csbom-v2")
+			Expect(err).To(HaveOccurred())
+		})
 
-	refs := OCIRefs(document)
-	if len(refs) != 2 {
-		t.Fatalf("expected image and Helm chart refs, got %#v", refs)
-	}
-	if document.Components[1].Type != ComponentTypeHelmChart {
-		t.Fatalf("expected Helm chart component, got %#v", document.Components[1])
-	}
-	if document.Components[1].Reference != "registry.example.com/charts/dependency:2.0.0" {
-		t.Fatalf("unexpected Helm chart reference: %q", document.Components[1].Reference)
-	}
-}
-
-func TestParseCSBOMV2IncludesHelmChartOCIRefs(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
+		It("includes Helm chart OCI refs", func() {
+			document, err := Parse(strings.NewReader(`
 version: "2"
 name: chart
 helmCharts:
@@ -185,42 +137,16 @@ containerImages:
   ghcr.io/example/api:
     ref: ghcr.io/example/api:1.2.3
 `), "csbom-v2")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+			Expect(err).NotTo(HaveOccurred())
 
-	refs := OCIRefs(document)
-	if len(refs) != 2 {
-		t.Fatalf("expected image and Helm chart refs, got %#v", refs)
-	}
-	if len(ImageRefs(document)) != 1 {
-		t.Fatalf("expected only the container image from ImageRefs, got %#v", ImageRefs(document))
-	}
-	if document.Components[1].Reference != "registry.example.com/charts/dependency:2.0.0" {
-		t.Fatalf("unexpected Helm chart reference: %q", document.Components[1].Reference)
-	}
-}
+			refs := OCIRefs(document)
+			Expect(refs).To(HaveLen(2))
+			Expect(ImageRefs(document)).To(HaveLen(1))
+			Expect(document.Components[1].Reference).To(Equal("registry.example.com/charts/dependency:2.0.0"))
+		})
 
-func TestParseCSBOMSkipsHelmChartRefsWithoutOCIScheme(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
-components:
-  chart:
-    containerImages:
-      ghcr.io/example/api: ghcr.io/example/api:1.2.3
-    files:
-      dependency:
-        ociRef: registry.example.com/charts/dependency:2.0.0
-`), "csbom")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
-	if len(document.Components) != 1 || document.Components[0].Type != ComponentTypeOCIImage {
-		t.Fatalf("expected only the container image, got %#v", document.Components)
-	}
-}
-
-func TestParseCSBOMV2SkipsHelmChartRefsWithoutOCIScheme(t *testing.T) {
-	document, err := Parse(strings.NewReader(`
+		It("skips Helm chart refs without an OCI scheme", func() {
+			document, err := Parse(strings.NewReader(`
 version: "2"
 name: chart
 helmCharts:
@@ -230,16 +156,33 @@ containerImages:
   ghcr.io/example/api:
     ref: ghcr.io/example/api:1.2.3
 `), "csbom-v2")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
-	if len(document.Components) != 1 || document.Components[0].Type != ComponentTypeOCIImage {
-		t.Fatalf("expected only the container image, got %#v", document.Components)
-	}
-}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(document.Components).To(HaveLen(1))
+			Expect(document.Components[0].Type).To(Equal(ComponentTypeOCIImage))
+		})
+	})
 
-func TestParseSPDXJSON(t *testing.T) {
-	document, err := Parse(strings.NewReader(`{
+	Context("format selection", func() {
+		It("uses only the configured format", func() {
+			_, err := Parse(strings.NewReader(`
+components:
+  chart:
+    containerImages:
+      ghcr.io/example/api: ghcr.io/example/api:1.2.3
+`), "csbom-v2")
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("rejects an unsupported format", func() {
+			_, err := Parse(strings.NewReader("{}"), "auto")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`unsupported bom format "auto"`))
+		})
+	})
+
+	Context("SPDX format", func() {
+		It("parses SPDX JSON", func() {
+			document, err := Parse(strings.NewReader(`{
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
@@ -268,20 +211,12 @@ func TestParseSPDXJSON(t *testing.T) {
     }
   ]
 }`), "spdx-json")
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
+			Expect(err).NotTo(HaveOccurred())
 
-	got := ImageRefs(document)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 image refs, got %d", len(got))
-	}
-
-	if got[0].Reference != "ghcr.io/example/api:1.2.3" {
-		t.Fatalf("unexpected first ref: %q", got[0].Reference)
-	}
-
-	if got[1].Reference != "quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
-		t.Fatalf("unexpected second ref: %q", got[1].Reference)
-	}
-}
+			got := ImageRefs(document)
+			Expect(got).To(HaveLen(2))
+			Expect(got[0].Reference).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(got[1].Reference).To(Equal("quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+		})
+	})
+})

@@ -15,52 +15,40 @@ func TestBomlint(t *testing.T) {
 	RunSpecs(t, "BOM lint config suite")
 }
 
-func TestFindLoadsNearestConfig(t *testing.T) {
-	root := t.TempDir()
-	configPath := filepath.Join(root, FileName)
-	if err := os.WriteFile(configPath, []byte(`
+var _ = Describe("Find", func() {
+	It("loads the nearest config", func() {
+		root := GinkgoT().TempDir()
+		configPath := filepath.Join(root, FileName)
+		Expect(os.WriteFile(configPath, []byte(`
 excludePaths:
   - charts/legacy
 allowedRegistries:
   - ghcr.io
   - registry.example.com:5000
-`), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+`), 0o600)).To(Succeed())
 
-	bomPath := filepath.Join(root, "charts", "api", "bom.yaml")
-	if err := os.MkdirAll(filepath.Dir(bomPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(bomPath, []byte("{}\n"), 0o600); err != nil {
-		t.Fatalf("write BOM: %v", err)
-	}
+		bomPath := filepath.Join(root, "charts", "api", "bom.yaml")
+		Expect(os.MkdirAll(filepath.Dir(bomPath), 0o755)).To(Succeed())
+		Expect(os.WriteFile(bomPath, []byte("{}\n"), 0o600)).To(Succeed())
 
-	config, directory, found, err := Find(bomPath)
-	if err != nil {
-		t.Fatalf("Find returned error: %v", err)
-	}
-	if !found || directory != root {
-		t.Fatalf("unexpected config location: found=%t directory=%q", found, directory)
-	}
-	if !slices.Equal(config.ExcludePaths, []string{"charts/legacy"}) {
-		t.Fatalf("unexpected excludes: %#v", config.ExcludePaths)
-	}
-	if !slices.Equal(config.AllowedRegistries, []string{"ghcr.io", "registry.example.com:5000"}) {
-		t.Fatalf("unexpected registries: %#v", config.AllowedRegistries)
-	}
-}
+		config, directory, found, err := Find(bomPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(directory).To(Equal(root))
+		Expect(slices.Equal(config.ExcludePaths, []string{"charts/legacy"})).To(BeTrue())
+		Expect(slices.Equal(config.AllowedRegistries, []string{"ghcr.io", "registry.example.com:5000"})).To(BeTrue())
+	})
+})
 
-func TestLoadRejectsUnknownFields(t *testing.T) {
-	directory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(directory, FileName), []byte("allowedRegistry: ghcr.io\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+var _ = Describe("Load", func() {
+	It("rejects unknown fields", func() {
+		directory := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(directory, FileName), []byte("allowedRegistry: ghcr.io\n"), 0o600)).To(Succeed())
 
-	if _, _, err := Load(directory); err == nil {
-		t.Fatal("expected unknown config field to fail")
-	}
-}
+		_, _, err := Load(directory)
+		Expect(err).To(HaveOccurred())
+	})
+})
 
 var _ = Describe("BOM exclusions", func() {
 	selectors := []string{"boms/legacy", "boms/*/generated.yaml", "./boms/archive/"}

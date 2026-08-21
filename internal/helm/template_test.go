@@ -4,26 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestChartName(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: example-chart\nversion: 0.1.0\n"), 0o644); err != nil {
-		t.Fatalf("write Chart.yaml: %v", err)
-	}
-
-	name, err := ChartName(dir)
-	if err != nil {
-		t.Fatalf("ChartName returned error: %v", err)
-	}
-
-	if name != "example-chart" {
-		t.Fatalf("expected chart name example-chart, got %s", name)
-	}
+func TestHelm(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Helm suite")
 }
 
-func TestEnsureInstalled(t *testing.T) {
-	if err := EnsureInstalled(); err != nil {
-		t.Fatalf("expected helm to be installed in test environment: %v", err)
-	}
-}
+var _ = Describe("ChartName", func() {
+	It("returns the chart name from Chart.yaml", func() {
+		dir := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: example-chart\nversion: 0.1.0\n"), 0o644)).To(Succeed())
+
+		name, err := ChartName(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(name).To(Equal("example-chart"))
+	})
+})
+
+var _ = Describe("EnsureInstalled", func() {
+	It("succeeds when helm is installed in the test environment", func() {
+		Expect(EnsureInstalled()).NotTo(HaveOccurred())
+	})
+})

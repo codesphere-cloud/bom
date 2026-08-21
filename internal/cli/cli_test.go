@@ -4,14 +4,25 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestRootCommandIncludesWorkflowCommands(t *testing.T) {
-	cmd := New(strings.NewReader(""), io.Discard, io.Discard).RootCommand()
-
-	for _, args := range [][]string{{"generate"}, {"check"}, {"registry", "login"}} {
-		if _, _, err := cmd.Find(args); err != nil {
-			t.Fatalf("find command %v: %v", args, err)
-		}
-	}
+func TestCli(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "CLI suite")
 }
+
+var _ = Describe("Root command", func() {
+	DescribeTable("includes workflow commands",
+		func(args []string) {
+			cmd := New(strings.NewReader(""), io.Discard, io.Discard).RootCommand()
+			_, _, err := cmd.Find(args)
+			Expect(err).NotTo(HaveOccurred())
+		},
+		Entry("generate", []string{"generate"}),
+		Entry("check", []string{"check"}),
+		Entry("registry login", []string{"registry", "login"}),
+	)
+})

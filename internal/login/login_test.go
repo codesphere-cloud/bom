@@ -10,62 +10,56 @@ import (
 
 	"github.com/codesphere-cloud/bom/internal/logging"
 	dockerconfig "github.com/docker/cli/cli/config"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestRunStoresCredentials(t *testing.T) {
-	dockerConfigDir := t.TempDir()
-	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
-
-	var stdout bytes.Buffer
-	err := Run(strings.NewReader(""), &stdout, logging.NewWriterLogger(io.Discard, false), Config{
-		Server:   "ghcr.io",
-		Username: "alice",
-		Password: "secret",
-	})
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-
-	configPath := filepath.Join(dockerConfigDir, "config.json")
-	if _, err := os.ReadFile(configPath); err != nil {
-		t.Fatalf("read docker config: %v", err)
-	}
-
-	cfg, err := dockerconfig.Load(dockerConfigDir)
-	if err != nil {
-		t.Fatalf("load docker config: %v", err)
-	}
-	auth, err := cfg.GetAuthConfig("ghcr.io")
-	if err != nil {
-		t.Fatalf("get auth config: %v", err)
-	}
-	if auth.Username != "alice" || auth.Password != "secret" {
-		t.Fatalf("unexpected auth config: %#v", auth)
-	}
+func TestLogin(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Login suite")
 }
 
-func TestRunReadsPasswordFromStdin(t *testing.T) {
-	dockerConfigDir := t.TempDir()
-	t.Setenv("DOCKER_CONFIG", dockerConfigDir)
+var _ = Describe("Run", func() {
+	It("stores credentials passed directly", func() {
+		dockerConfigDir := GinkgoT().TempDir()
+		GinkgoT().Setenv("DOCKER_CONFIG", dockerConfigDir)
 
-	err := Run(strings.NewReader("hunter2\n"), &bytes.Buffer{}, logging.NewWriterLogger(io.Discard, false), Config{
-		Server:        "docker.io",
-		Username:      "bob",
-		PasswordStdin: true,
+		var stdout bytes.Buffer
+		err := Run(strings.NewReader(""), &stdout, logging.NewWriterLogger(io.Discard, false), Config{
+			Server:   "ghcr.io",
+			Username: "alice",
+			Password: "secret",
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		configPath := filepath.Join(dockerConfigDir, "config.json")
+		_, err = os.ReadFile(configPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		cfg, err := dockerconfig.Load(dockerConfigDir)
+		Expect(err).NotTo(HaveOccurred())
+		auth, err := cfg.GetAuthConfig("ghcr.io")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(auth.Username).To(Equal("alice"))
+		Expect(auth.Password).To(Equal("secret"))
 	})
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
 
-	cfg, err := dockerconfig.Load(dockerConfigDir)
-	if err != nil {
-		t.Fatalf("load docker config: %v", err)
-	}
-	auth, err := cfg.GetAuthConfig("docker.io")
-	if err != nil {
-		t.Fatalf("get auth config: %v", err)
-	}
-	if auth.Username != "bob" || auth.Password != "hunter2" {
-		t.Fatalf("unexpected auth config: %#v", auth)
-	}
-}
+	It("reads the password from stdin", func() {
+		dockerConfigDir := GinkgoT().TempDir()
+		GinkgoT().Setenv("DOCKER_CONFIG", dockerConfigDir)
+
+		err := Run(strings.NewReader("hunter2\n"), &bytes.Buffer{}, logging.NewWriterLogger(io.Discard, false), Config{
+			Server:        "docker.io",
+			Username:      "bob",
+			PasswordStdin: true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		cfg, err := dockerconfig.Load(dockerConfigDir)
+		Expect(err).NotTo(HaveOccurred())
+		auth, err := cfg.GetAuthConfig("docker.io")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(auth.Username).To(Equal("bob"))
+		Expect(auth.Password).To(Equal("hunter2"))
+	})
+})
