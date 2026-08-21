@@ -113,6 +113,13 @@ additionalImages:
   - key: support-tool
     image: ghcr.io/acme/support-tool:2.1.0
 
+  # A literal reference can also be built from a repository and a tag and/or digest.
+  - key: support-tool-by-digest
+    image:
+      repository: ghcr.io/acme/support-tool
+      tag: 2.1.0
+      digest: sha256:1234567890123456789012345678901234567890123456789012345678901234
+
   # Images can also be selected from non-workload rendered resources.
   - resource:
       apiVersion: v1
@@ -120,6 +127,17 @@ additionalImages:
       name: extra-images
     key: metrics
     image: .data.sidecars[] | select(.name == "metrics") | .image
+
+  # The repository/tag/digest object form also supports yq-style selectors
+  # per field when a resource is set, mixing literals and selectors freely.
+  - resource:
+      apiVersion: v1
+      kind: ConfigMap
+      name: extra-images
+    key: sidecar-by-tag
+    image:
+      repository: ghcr.io/acme/sidecar
+      tag: .data.sidecarTag
 
 imageKeyMappings:
   ghcr.io/acme/api: api
@@ -131,8 +149,9 @@ imageKeyMappings:
 - `bomGenerationValues` provides default Helm values used only for BOM generation
 - CLI- or Action-supplied chart inputs still override those defaults
 - `additionalImages` lets a chart declare literal image references that are not present in the chart, or select references from rendered resources outside the standard workload image fields
-- when `resource` is omitted, `image` must be a literal OCI image reference
-- when `resource` is present, it selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`; `image` is evaluated as a yq-style selector and must resolve to exactly one string image reference
+- `image` may be a plain string (a literal OCI image reference, or, when `resource` is set, a yq-style selector), or an object with `repository` and `tag` and/or `digest`
+- when `resource` is omitted, the object form's `repository`, `tag`, and `digest` are used as literal values
+- when `resource` is present, it selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`; a plain string `image` is evaluated as a yq-style selector and must resolve to exactly one string image reference. In the object form, any of `repository`, `tag`, or `digest` that starts with `.` is evaluated as a yq-style selector against that resource too; other values are used literally
 - `key` optionally overrides the BOM key for that configured image
 - `imageKeyMappings` remaps auto-discovered repository keys in `csbom-json` and `csbom-yaml`
 

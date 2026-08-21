@@ -49,7 +49,7 @@ bomGenerationValues:
 	}
 
 	direct := cfg.AdditionalImages[0]
-	if direct.Key != "external" || direct.Image != "ghcr.io/example/external:2.0.0" {
+	if direct.Key != "external" || direct.Image.Literal != "ghcr.io/example/external:2.0.0" {
 		t.Fatalf("unexpected direct image: %#v", direct)
 	}
 	if direct.Resource != (ResourceRef{}) {
@@ -63,8 +63,8 @@ bomGenerationValues:
 	if got.Key != "sidecar" {
 		t.Fatalf("unexpected configured key: %q", got.Key)
 	}
-	if got.Image != ".data.sidecar" {
-		t.Fatalf("unexpected image selector: %q", got.Image)
+	if got.Image.Literal != ".data.sidecar" {
+		t.Fatalf("unexpected image selector: %q", got.Image.Literal)
 	}
 	if cfg.ImageKeyMappings["ghcr.io/example/api"] != "api" {
 		t.Fatalf("unexpected image key mapping: %#v", cfg.ImageKeyMappings)
@@ -79,6 +79,60 @@ bomGenerationValues:
 	}
 	if imageValues["tag"] != "latest" {
 		t.Fatalf("unexpected dummy tag: %#v", imageValues["tag"])
+	}
+}
+
+func TestLoadConfigParsesStructuredAdditionalImage(t *testing.T) {
+	chartPath := t.TempDir()
+	content := []byte(`
+additionalImages:
+  - key: external
+    image:
+      repository: ghcr.io/example/external
+      tag: "2.0.0"
+      digest: sha256:1234567890123456789012345678901234567890123456789012345678901234
+`)
+	if err := os.WriteFile(filepath.Join(chartPath, fileNames[0]), content, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(chartPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if len(cfg.AdditionalImages) != 1 {
+		t.Fatalf("expected 1 additional image, got %d", len(cfg.AdditionalImages))
+	}
+
+	got := cfg.AdditionalImages[0].Image
+	if got.Repository != "ghcr.io/example/external" || got.Tag != "2.0.0" || got.Digest != "sha256:1234567890123456789012345678901234567890123456789012345678901234" {
+		t.Fatalf("unexpected structured image: %#v", got)
+	}
+
+	ref, ok := got.Ref()
+	if !ok {
+		t.Fatal("expected Ref() to succeed")
+	}
+	want := "ghcr.io/example/external:2.0.0@sha256:1234567890123456789012345678901234567890123456789012345678901234"
+	if ref != want {
+		t.Fatalf("unexpected ref: got %q, want %q", ref, want)
+	}
+}
+
+func TestImageValueRejectsMissingTagAndDigest(t *testing.T) {
+	var v ImageValue
+	err := v.UnmarshalJSON([]byte(`{"repository":"ghcr.io/example/external"}`))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestImageValueRejectsMissingRepository(t *testing.T) {
+	var v ImageValue
+	err := v.UnmarshalJSON([]byte(`{"tag":"2.0.0"}`))
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
 

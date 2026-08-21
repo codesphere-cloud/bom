@@ -103,17 +103,13 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 	apiVersion := strings.TrimSpace(entry.Resource.APIVersion)
 	kind := strings.TrimSpace(entry.Resource.Kind)
 	name := strings.TrimSpace(entry.Resource.Name)
-	image := strings.TrimSpace(entry.Image)
 
 	if apiVersion == "" && kind == "" && name == "" {
-		return directConfiguredImage(image, entry.Key)
+		return directConfiguredImage(entry.Image, entry.Key)
 	}
 
 	if apiVersion == "" || kind == "" || name == "" {
 		return ImageRef{}, fmt.Errorf("configured image resource must set apiVersion, kind, and name")
-	}
-	if image == "" {
-		return ImageRef{}, fmt.Errorf("configured image for %s/%s must define an image selector", entry.Resource.Kind, entry.Resource.Name)
 	}
 
 	document := findManifestDocument(documents, entry.Resource)
@@ -121,43 +117,130 @@ func extractConfiguredImage(documents []manifestDocument, entry bomrc.Additional
 		return ImageRef{}, fmt.Errorf("%w: resource %s %s %s", errConfiguredImageNotFound, entry.Resource.APIVersion, entry.Resource.Kind, entry.Resource.Name)
 	}
 
-	value, err := evalYQSelect(document.object, entry.Image)
+	var ref ImageRef
+	var err error
+	if entry.Image.Repository != "" {
+		ref, err = resolveStructuredConfiguredImage(document, entry.Resource, entry.Image)
+	} else {
+		ref, err = resolveSelectorConfiguredImage(document, entry.Resource, entry.Image.Literal)
+	}
 	if err != nil {
-		if isMissingValueError(err) {
-			return ImageRef{}, fmt.Errorf("%w: %s/%s with %q", errConfiguredImageNotFound, entry.Resource.Kind, entry.Resource.Name, entry.Image)
-		}
-		return ImageRef{}, fmt.Errorf("resolve configured image for %s/%s with %q: %w", entry.Resource.Kind, entry.Resource.Name, entry.Image, err)
+		return ImageRef{}, err
 	}
 
-	ref, ok := ParseImageRef(value)
-	if !ok {
-		return ImageRef{}, fmt.Errorf("configured image selector %q returned non-image value %q", entry.Image, value)
-	}
 	if key := strings.TrimSpace(entry.Key); key != "" {
 		ref.Repository = key
-	}
-
-	ref.Sources = []string{
-		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", entry.Resource.Kind, entry.Resource.Name, entry.Image),
 	}
 	return ref, nil
 }
 
-func directConfiguredImage(image string, key string) (ImageRef, error) {
+func resolveSelectorConfiguredImage(document *manifestDocument, resource bomrc.ResourceRef, image string) (ImageRef, error) {
+	image = strings.TrimSpace(image)
 	if image == "" {
+		return ImageRef{}, fmt.Errorf("configured image for %s/%s must define an image selector", resource.Kind, resource.Name)
+	}
+
+	value, err := evalYQSelect(document.object, image)
+	if err != nil {
+		if isMissingValueError(err) {
+			return ImageRef{}, fmt.Errorf("%w: %s/%s with %q", errConfiguredImageNotFound, resource.Kind, resource.Name, image)
+		}
+		return ImageRef{}, fmt.Errorf("resolve configured image for %s/%s with %q: %w", resource.Kind, resource.Name, image, err)
+	}
+
+	ref, ok := ParseImageRef(value)
+	if !ok {
+		return ImageRef{}, fmt.Errorf("configured image selector %q returned non-image value %q", image, value)
+	}
+
+	ref.Sources = []string{
+		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", resource.Kind, resource.Name, image),
+	}
+	return ref, nil
+}
+
+// resolveStructuredConfiguredImage builds an image reference from a
+// repository/tag/digest object where each field is either a literal value
+// or, when it starts with ".", a yq-style selector evaluated against the
+// resource identified by resource.
+func resolveStructuredConfiguredImage(document *manifestDocument, resource bomrc.ResourceRef, image bomrc.ImageValue) (ImageRef, error) {
+	repository, err := resolveImageField(document, resource, "repository", image.Repository)
+	if err != nil {
+		return ImageRef{}, err
+	}
+	if repository == "" {
+		return ImageRef{}, fmt.Errorf("configured image for %s/%s must define a repository", resource.Kind, resource.Name)
+	}
+
+	tag, err := resolveImageField(document, resource, "tag", image.Tag)
+	if err != nil {
+		return ImageRef{}, err
+	}
+	digest, err := resolveImageField(document, resource, "digest", image.Digest)
+	if err != nil {
+		return ImageRef{}, err
+	}
+	if tag == "" && digest == "" {
+		return ImageRef{}, fmt.Errorf("configured image for %s/%s must resolve a tag and/or digest", resource.Kind, resource.Name)
+	}
+
+	value := repository
+	if tag != "" {
+		value += ":" + tag
+	}
+	if digest != "" {
+		value += "@" + digest
+	}
+
+	ref, ok := ParseImageRef(value)
+	if !ok {
+		return ImageRef{}, fmt.Errorf("configured image %q is not a valid OCI image reference", value)
+	}
+
+	ref.Sources = []string{
+		fmt.Sprintf("%s/%s configured by .bomrc.yaml/.yml: %s", resource.Kind, resource.Name, value),
+	}
+	return ref, nil
+}
+
+func resolveImageField(document *manifestDocument, resource bomrc.ResourceRef, field string, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || !isYQSelector(value) {
+		return value, nil
+	}
+
+	resolved, err := evalYQSelect(document.object, value)
+	if err != nil {
+		if isMissingValueError(err) {
+			return "", fmt.Errorf("%w: %s/%s %s selector %q", errConfiguredImageNotFound, resource.Kind, resource.Name, field, value)
+		}
+		return "", fmt.Errorf("resolve configured image %s for %s/%s with %q: %w", field, resource.Kind, resource.Name, value, err)
+	}
+
+	return resolved, nil
+}
+
+func isYQSelector(value string) bool {
+	return strings.HasPrefix(value, ".")
+}
+
+func directConfiguredImage(image bomrc.ImageValue, key string) (ImageRef, error) {
+	value, ok := image.Ref()
+	value = strings.TrimSpace(value)
+	if !ok || value == "" {
 		return ImageRef{}, fmt.Errorf("configured image must define an image reference")
 	}
 
-	ref, ok := ParseImageRef(image)
+	ref, ok := ParseImageRef(value)
 	if !ok {
-		return ImageRef{}, fmt.Errorf("configured image %q is not a valid OCI image reference", image)
+		return ImageRef{}, fmt.Errorf("configured image %q is not a valid OCI image reference", value)
 	}
 	if key = strings.TrimSpace(key); key != "" {
 		ref.Repository = key
 	}
 
 	ref.Sources = []string{
-		fmt.Sprintf("configured directly by .bomrc.yaml/.yml: %s", image),
+		fmt.Sprintf("configured directly by .bomrc.yaml/.yml: %s", value),
 	}
 	return ref, nil
 }
