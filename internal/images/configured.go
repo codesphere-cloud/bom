@@ -2,19 +2,32 @@ package images
 
 import (
 	"bytes"
+	"container/list"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/bomrc"
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	yamlv3 "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
-var errConfiguredImageNotFound = errors.New("configured image not found")
+var (
+	errConfiguredImageNotFound = errors.New("configured image not found")
+	// errMissingValue reports that an expression resolved to nothing (no
+	// matches, or an explicit null), as opposed to failing to evaluate.
+	errMissingValue = errors.New("expression returned no value")
+)
+
+func init() {
+	// yq logs decoding and traversal warnings to stderr by default.
+	yqlib.GetLogger().SetLevel(slog.LevelError)
+}
 
 type ExtractConfiguredOptions struct {
 	ValidateExists bool
@@ -63,40 +76,61 @@ func manifestDocuments(manifest []byte) ([]manifestDocument, error) {
 			continue
 		}
 
-		header, object, err := parseManifestDocument(&document)
+		parsed, err := parseManifestDocument(&document)
 		if err != nil {
 			return nil, err
 		}
 
-		documents = append(documents, manifestDocument{
-			header: header,
-			object: object,
-		})
+		documents = append(documents, parsed)
 	}
 }
 
 type manifestDocument struct {
 	header manifestHeader
-	object any
+	// raw is the YAML representation of the document, used to build the yq
+	// node on demand.
+	raw  []byte
+	node *yqlib.CandidateNode
 }
 
-func parseManifestDocument(document *yamlv3.Node) (manifestHeader, any, error) {
+func parseManifestDocument(document *yamlv3.Node) (manifestDocument, error) {
 	documentBytes, err := yamlv3Marshal(document)
 	if err != nil {
-		return manifestHeader{}, nil, fmt.Errorf("marshal manifest document: %w", err)
+		return manifestDocument{}, fmt.Errorf("marshal manifest document: %w", err)
 	}
 
 	var header manifestHeader
 	if err := sigsyaml.Unmarshal(documentBytes, &header); err != nil {
-		return manifestHeader{}, nil, fmt.Errorf("decode manifest header: %w", err)
+		return manifestDocument{}, fmt.Errorf("decode manifest header: %w", err)
 	}
 
-	var object any
-	if err := sigsyaml.Unmarshal(documentBytes, &object); err != nil {
-		return manifestHeader{}, nil, fmt.Errorf("decode manifest object: %w", err)
+	return manifestDocument{
+		header: header,
+		raw:    documentBytes,
+	}, nil
+}
+
+// yqNode returns the document as a yq candidate node, parsing it on first use.
+func (d *manifestDocument) yqNode() (*yqlib.CandidateNode, error) {
+	if d.node != nil {
+		return d.node, nil
 	}
 
-	return header, object, nil
+	documents, err := yqlib.ReadDocuments(bytes.NewReader(d.raw), yqlib.NewYamlDecoder(yqlib.ConfiguredYamlPreferences))
+	if err != nil {
+		return nil, fmt.Errorf("parse manifest document: %w", err)
+	}
+	if documents.Len() == 0 {
+		return nil, fmt.Errorf("parse manifest document: no content")
+	}
+
+	node, ok := documents.Front().Value.(*yqlib.CandidateNode)
+	if !ok {
+		return nil, fmt.Errorf("parse manifest document: unexpected node %T", documents.Front().Value)
+	}
+
+	d.node = node
+	return node, nil
 }
 
 func extractConfiguredImage(documents []manifestDocument, entry bomrc.AdditionalImage) (ImageRef, error) {
@@ -140,9 +174,9 @@ func resolveSelectorConfiguredImage(document *manifestDocument, resource bomrc.R
 		return ImageRef{}, fmt.Errorf("configured image for %s/%s must define an image selector", resource.Kind, resource.Name)
 	}
 
-	value, err := evalYQSelect(document.object, image)
+	value, err := evalYQString(document, image)
 	if err != nil {
-		if isMissingValueError(err) {
+		if errors.Is(err, errMissingValue) {
 			return ImageRef{}, fmt.Errorf("%w: %s/%s with %q", errConfiguredImageNotFound, resource.Kind, resource.Name, image)
 		}
 		return ImageRef{}, fmt.Errorf("resolve configured image for %s/%s with %q: %w", resource.Kind, resource.Name, image, err)
@@ -209,9 +243,9 @@ func resolveImageField(document *manifestDocument, resource bomrc.ResourceRef, f
 		return value, nil
 	}
 
-	resolved, err := evalYQSelect(document.object, value)
+	resolved, err := evalYQString(document, value)
 	if err != nil {
-		if isMissingValueError(err) {
+		if errors.Is(err, errMissingValue) {
 			return "", fmt.Errorf("%w: %s/%s %s selector %q", errConfiguredImageNotFound, resource.Kind, resource.Name, field, value)
 		}
 		return "", fmt.Errorf("resolve configured image %s for %s/%s with %q: %w", field, resource.Kind, resource.Name, value, err)
@@ -245,11 +279,6 @@ func directConfiguredImage(image bomrc.ImageValue, key string) (ImageRef, error)
 	return ref, nil
 }
 
-func isMissingValueError(err error) bool {
-	message := err.Error()
-	return message == "expression returned no values" || strings.HasPrefix(message, "field ")
-}
-
 func findManifestDocument(documents []manifestDocument, resource bomrc.ResourceRef) *manifestDocument {
 	for idx := range documents {
 		header := documents[idx].header
@@ -261,164 +290,68 @@ func findManifestDocument(documents []manifestDocument, resource bomrc.ResourceR
 	return nil
 }
 
-func evalYQSelect(object any, expression string) (string, error) {
-	stages := splitPipeline(expression)
-	if len(stages) == 0 {
-		return "", fmt.Errorf("empty expression")
+// evalYQString evaluates a yq expression against the document and requires it
+// to resolve to exactly one scalar value. Any yq expression is supported; the
+// evaluation is delegated to yq itself.
+func evalYQString(document *manifestDocument, expression string) (string, error) {
+	results, err := evalYQ(document, expression)
+	if err != nil {
+		return "", err
 	}
 
-	current := []any{object}
-	for _, stage := range stages {
-		var err error
-		switch {
-		case strings.HasPrefix(stage, "."):
-			current, err = evalPathStage(current, stage)
-		case strings.HasPrefix(stage, "select("):
-			current, err = evalSelectStage(current, stage)
-		default:
-			return "", fmt.Errorf("unsupported stage %q", stage)
-		}
-		if err != nil {
-			return "", err
-		}
+	if len(results) == 0 {
+		return "", errMissingValue
+	}
+	if len(results) != 1 {
+		return "", fmt.Errorf("expression returned %d values; expected exactly 1", len(results))
 	}
 
-	if len(current) == 0 {
-		return "", fmt.Errorf("expression returned no values")
+	node := results[0]
+	if node.Tag == "!!null" {
+		return "", errMissingValue
 	}
-	if len(current) != 1 {
-		return "", fmt.Errorf("expression returned %d values; expected exactly 1", len(current))
-	}
-
-	value, ok := current[0].(string)
-	if !ok {
-		return "", fmt.Errorf("expression returned %T; expected string", current[0])
+	if node.Kind != yqlib.ScalarNode {
+		return "", fmt.Errorf("expression returned a non-scalar value")
 	}
 
-	return strings.TrimSpace(value), nil
+	return strings.TrimSpace(node.Value), nil
 }
 
-func splitPipeline(expression string) []string {
-	parts := strings.Split(expression, "|")
-	stages := make([]string, 0, len(parts))
-	for _, part := range parts {
-		stage := strings.TrimSpace(part)
-		if stage == "" {
+func evalYQ(document *manifestDocument, expression string) ([]*yqlib.CandidateNode, error) {
+	if strings.TrimSpace(expression) == "" {
+		return nil, fmt.Errorf("empty expression")
+	}
+
+	node, err := document.yqNode()
+	if err != nil {
+		return nil, err
+	}
+
+	// yq operators may mutate the nodes they run against, so evaluate a copy to
+	// keep the parsed document reusable across entries.
+	matches, err := yqlib.NewAllAtOnceEvaluator().EvaluateNodes(expression, node.Copy())
+	if err != nil {
+		return nil, fmt.Errorf("evaluate expression: %w", err)
+	}
+
+	return candidateNodes(matches), nil
+}
+
+func candidateNodes(matches *list.List) []*yqlib.CandidateNode {
+	if matches == nil {
+		return nil
+	}
+
+	nodes := make([]*yqlib.CandidateNode, 0, matches.Len())
+	for element := matches.Front(); element != nil; element = element.Next() {
+		node, ok := element.Value.(*yqlib.CandidateNode)
+		if !ok {
 			continue
 		}
-		stages = append(stages, stage)
-	}
-	return stages
-}
-
-func evalPathStage(values []any, stage string) ([]any, error) {
-	if stage == "." {
-		return values, nil
+		nodes = append(nodes, node)
 	}
 
-	segments := strings.Split(strings.TrimPrefix(stage, "."), ".")
-	current := values
-
-	for _, segment := range segments {
-		if segment == "" {
-			return nil, fmt.Errorf("invalid path stage %q", stage)
-		}
-
-		iterate := strings.HasSuffix(segment, "[]")
-		key := strings.TrimSuffix(segment, "[]")
-		if key == "" {
-			return nil, fmt.Errorf("invalid path segment %q", segment)
-		}
-
-		next := []any{}
-		for _, value := range current {
-			object, ok := value.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("cannot access .%s on %T", key, value)
-			}
-
-			child, ok := object[key]
-			if !ok {
-				return nil, fmt.Errorf("field %q not found", key)
-			}
-
-			if !iterate {
-				next = append(next, child)
-				continue
-			}
-
-			items, ok := child.([]any)
-			if !ok {
-				return nil, fmt.Errorf("field %q is %T, expected array", key, child)
-			}
-			next = append(next, items...)
-		}
-
-		current = next
-	}
-
-	return current, nil
-}
-
-func evalSelectStage(values []any, stage string) ([]any, error) {
-	path, want, err := parseSelectStage(stage)
-	if err != nil {
-		return nil, err
-	}
-	filtered := []any{}
-
-	for _, value := range values {
-		resolved, err := evalYQSelectValue(value, path)
-		if err != nil {
-			return nil, err
-		}
-		text, ok := resolved.(string)
-		if ok && text == want {
-			filtered = append(filtered, value)
-		}
-	}
-
-	return filtered, nil
-}
-
-func parseSelectStage(stage string) (string, string, error) {
-	body := strings.TrimSpace(stage)
-	if !strings.HasPrefix(body, "select(") || !strings.HasSuffix(body, ")") {
-		return "", "", fmt.Errorf("unsupported select stage %q", stage)
-	}
-
-	body = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(body, "select("), ")"))
-	parts := strings.SplitN(body, "==", 2)
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("unsupported select stage %q", stage)
-	}
-
-	path := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-	if !strings.HasPrefix(path, ".") {
-		return "", "", fmt.Errorf("unsupported select path %q", path)
-	}
-	if len(value) < 2 {
-		return "", "", fmt.Errorf("unsupported select value %q", value)
-	}
-
-	quote := value[0]
-	if (quote != '"' && quote != '\'') || value[len(value)-1] != quote {
-		return "", "", fmt.Errorf("unsupported select value %q", value)
-	}
-
-	return path, value[1 : len(value)-1], nil
-}
-
-func evalYQSelectValue(value any, path string) (any, error) {
-	resolved, err := evalPathStage([]any{value}, path)
-	if err != nil {
-		return nil, err
-	}
-	if len(resolved) != 1 {
-		return nil, fmt.Errorf("path %q returned %d values; expected exactly 1", path, len(resolved))
-	}
-	return resolved[0], nil
+	return nodes
 }
 
 func Merge(refs ...[]ImageRef) []ImageRef {

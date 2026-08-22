@@ -128,8 +128,8 @@ additionalImages:
     key: metrics
     image: .data.sidecars[] | select(.name == "metrics") | .image
 
-  # The repository/tag/digest object form also supports yq-style selectors
-  # per field when a resource is set, mixing literals and selectors freely.
+  # The repository/tag/digest object form also supports yq expressions
+  # per field when a resource is set, mixing literals and expressions freely.
   - resource:
       apiVersion: v1
       kind: ConfigMap
@@ -149,9 +149,10 @@ imageKeyMappings:
 - `bomGenerationValues` provides default Helm values used only for BOM generation
 - CLI- or Action-supplied chart inputs still override those defaults
 - `additionalImages` lets a chart declare literal image references that are not present in the chart, or select references from rendered resources outside the standard workload image fields
-- `image` may be a plain string (a literal OCI image reference, or, when `resource` is set, a yq-style selector), or an object with `repository` and `tag` and/or `digest`
+- `image` may be a plain string (a literal OCI image reference, or, when `resource` is set, a yq expression), or an object with `repository` and `tag` and/or `digest`
 - when `resource` is omitted, the object form's `repository`, `tag`, and `digest` are used as literal values
-- when `resource` is present, it selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`; a plain string `image` is evaluated as a yq-style selector and must resolve to exactly one string image reference. In the object form, any of `repository`, `tag`, or `digest` that starts with `.` is evaluated as a yq-style selector against that resource too; other values are used literally
+- when `resource` is present, it selects one rendered resource by `apiVersion`, `kind`, and `metadata.name`; a plain string `image` is evaluated as a yq expression and must resolve to exactly one scalar image reference. In the object form, any of `repository`, `tag`, or `digest` that starts with `.` is evaluated as a yq expression against that resource too; other values are used literally
+- expressions are evaluated by [yq](https://github.com/mikefarah/yq) itself, so the full yq expression language is available (paths, `select`, string operators, arithmetic, pipes, ...)
 - `key` optionally overrides the BOM key for that configured image
 - `imageKeyMappings` remaps auto-discovered repository keys in `csbom-json` and `csbom-yaml`
 
