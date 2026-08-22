@@ -194,6 +194,136 @@ data: {}
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("supports arbitrary yq expressions", func() {
+		manifest := []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-images
+data:
+  registry: ghcr.io
+  repository: acme/primary
+  version: 1.2.3
+  sidecars:
+    - name: metrics
+      enabled: false
+      image: ghcr.io/acme/metrics:4.5.6
+    - name: logs
+      enabled: true
+      image: ghcr.io/acme/logs:7.8.9
+`)
+
+		refs, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data.registry + "/" + .data.repository + ":" + .data.version`},
+			},
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Key:   "enabled-sidecar",
+				Image: bomrc.ImageValue{Literal: `[.data.sidecars[] | select(.enabled) | .image] | .[0]`},
+			},
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Key: "structured",
+				Image: bomrc.ImageValue{
+					Repository: `.data.repository | sub("acme", "other")`,
+					Tag:        `.data.sidecars[] | select(.name == "logs") | .image | split(":") | .[-1]`,
+				},
+			},
+		}, ExtractConfiguredOptions{ValidateExists: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refs).To(HaveLen(3))
+
+		Expect(refs[0].Reference).To(Equal("ghcr.io/acme/primary:1.2.3"))
+		Expect(refs[1].Reference).To(Equal("ghcr.io/acme/logs:7.8.9"))
+		Expect(refs[1].Repository).To(Equal("enabled-sidecar"))
+		Expect(refs[2].Reference).To(Equal("other/primary:7.8.9"))
+	})
+
+	It("errors when an expression is invalid", func() {
+		manifest := []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-images
+data:
+  primary: ghcr.io/acme/primary:1.2.3
+`)
+
+		_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data | select(`},
+			},
+		}, ExtractConfiguredOptions{})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("errors when an expression returns multiple values", func() {
+		manifest := []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-images
+data:
+  sidecars:
+    - image: ghcr.io/acme/metrics:4.5.6
+    - image: ghcr.io/acme/logs:7.8.9
+`)
+
+		_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data.sidecars[] | .image`},
+			},
+		}, ExtractConfiguredOptions{})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("errors when an expression returns a non-scalar value", func() {
+		manifest := []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-images
+data:
+  primary: ghcr.io/acme/primary:1.2.3
+`)
+
+		_, err := ExtractConfigured(manifest, []bomrc.AdditionalImage{
+			{
+				Resource: bomrc.ResourceRef{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "extra-images",
+				},
+				Image: bomrc.ImageValue{Literal: `.data`},
+			},
+		}, ExtractConfiguredOptions{})
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("rejects an invalid direct image reference", func() {
 		_, err := ExtractConfigured(nil, []bomrc.AdditionalImage{
 			{Image: bomrc.ImageValue{Literal: "https://example.com/image"}},

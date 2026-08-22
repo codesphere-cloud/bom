@@ -42,10 +42,7 @@ func Extract(manifest []byte) ([]ImageRef, error) {
 }
 
 func extractDocument(document *manifestDocument, found map[string]*ImageRef) error {
-	documentBytes, err := sigsyaml.Marshal(document.object)
-	if err != nil {
-		return fmt.Errorf("marshal manifest document: %w", err)
-	}
+	documentBytes := document.raw
 
 	switch document.header.Kind {
 	case "Pod":
@@ -124,14 +121,11 @@ func extractDocument(document *manifestDocument, found map[string]*ImageRef) err
 				return fmt.Errorf("decode List item: %w", err)
 			}
 
-			header, parsed, err := parseManifestDocument(&child)
+			parsed, err := parseManifestDocument(&child)
 			if err != nil {
 				return err
 			}
-			if err := extractDocument(&manifestDocument{
-				header: header,
-				object: parsed,
-			}, found); err != nil {
+			if err := extractDocument(&parsed, found); err != nil {
 				return err
 			}
 		}
