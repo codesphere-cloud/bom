@@ -216,11 +216,13 @@ var _ = Describe("generateRunner.runTargets", func() {
 						if cfg.ChartPath == "" {
 							return fmt.Errorf("missing chart path")
 						}
+						Expect(cfg.SBOM).To(BeTrue())
+						Expect(cfg.Cosign).To(BeTrue())
 						return os.WriteFile(outputPath, []byte("after\n"), 0o600)
 					},
 				},
 			},
-			cfg: GenerateConfig{Format: "csbom-yaml", Namespace: "default"},
+			cfg: GenerateConfig{Format: "csbom-yaml", Namespace: "default", SBOM: true, Cosign: true},
 		}
 
 		processed, changedOutputs, changedTargets, err := runner.runTargets([]string{"charts/api"})
@@ -293,6 +295,7 @@ var _ = Describe("generateRunner.run", func() {
 		}
 
 		Expect(runner.run()).To(Succeed())
-		Expect(logger.String()).To(ContainSubstring("repository root source  GITHUB_WORKSPACE"))
+		Expect(logger.String()).To(ContainSubstring("repository root source"))
+		Expect(logger.String()).To(ContainSubstring("GITHUB_WORKSPACE"))
 	})
 })

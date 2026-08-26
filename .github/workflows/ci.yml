@@ -76,7 +76,81 @@ jobs:
           registry-password: smoke-test
 
       - name: Run Check Mode Via Local Check Action
+        id: action_check
+        continue-on-error: true
         uses: ./check
         with:
           include-paths: testdata/charts/*/bom.json
           changed-only: "false"
+
+      - name: Fail if command unexpectedly succeeded
+        if: steps.action_check.outcome == 'success'
+        run: |
+          echo "Test failed: Command succeeded when it should have failed."
+          exit 1
+
+  attestation-smoke:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build dist artifacts
+        run: ./scripts/build-dist.sh
+
+      - name: Log in to GHCR
+        uses: ./registry-login
+        with:
+          registry-server: ghcr.io
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: image
+        name: Build and push smoke image
+        shell: bash
+        run: |
+          repository="$(echo "ghcr.io/${GITHUB_REPOSITORY}/attestation-smoke" | tr '[:upper:]' '[:lower:]')"
+          reference="${repository}:${GITHUB_SHA}"
+          docker build --tag "$reference" testdata/attestation/image
+          docker push "$reference"
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "reference=$reference" >> "$GITHUB_OUTPUT"
+
+      - name: Configure smoke chart image
+        shell: bash
+        env:
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+        run: |
+          sed -i "s|repository:.*|repository: $IMAGE_REPOSITORY|" testdata/attestation/chart/values.yaml
+          sed -i "s|tag:.*|tag: $GITHUB_SHA|" testdata/attestation/chart/values.yaml
+
+      - name: Generate and attest image SBOM
+        uses: ./generate
+        with:
+          include-paths: testdata/attestation/chart
+          changed-only: "false"
+          sbom: "true"
+          cosign: "true"
+
+      - name: Verify generated SBOM and keyless attestation
+        shell: bash
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.reference }}
+        run: |
+          test "$(find testdata/attestation/chart/sboms -type f -name '*.cdx.json' | wc -l)" -eq 1
+          cosign verify-attestation \
+            --type cyclonedx \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$IMAGE_REF"

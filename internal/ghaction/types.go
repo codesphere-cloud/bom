@@ -26,6 +26,8 @@ type GenerateConfig struct {
 	Format                       string
 	Namespace                    string
 	ReleaseName                  string
+	SBOM                         bool
+	Cosign                       bool
 	ValidateConfiguredImageExist bool
 	ExcludePaths                 string
 }

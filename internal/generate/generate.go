@@ -8,6 +8,7 @@ import (
 	"github.com/codesphere-cloud/bom/internal/bomrc"
 	"github.com/codesphere-cloud/bom/internal/helm"
 	"github.com/codesphere-cloud/bom/internal/images"
+	"github.com/codesphere-cloud/bom/internal/imagesbom"
 	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/codesphere-cloud/bom/internal/sbom"
 	"sigs.k8s.io/yaml"
@@ -26,6 +27,8 @@ type Config struct {
 	SetStrings                   []string
 	HelmArgs                     []string
 	Debug                        bool
+	SBOM                         bool
+	Cosign                       bool
 	ValidateConfiguredImageExist bool
 	ToolVersion                  string
 }
@@ -85,6 +88,13 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 		return err
 	}
 
+	mergedRefs := images.Merge(refs, configuredRefs)
+	if cfg.SBOM {
+		if err := imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign); err != nil {
+			return err
+		}
+	}
+
 	document := sbom.Document{
 		Metadata: sbom.Metadata{
 			Tool: sbom.ToolMetadata{
@@ -102,7 +112,7 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 				HelmArgs:    cfg.HelmArgs,
 			},
 		},
-		Components: sbom.ComponentsFromImages(images.Merge(refs, configuredRefs)),
+		Components: sbom.ComponentsFromImages(mergedRefs),
 	}
 
 	formatter, err := sbom.NewFormatter(cfg.Format)

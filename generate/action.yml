@@ -13,6 +13,14 @@ inputs:
     description: Restrict processing to charts changed in the current push or pull request.
     required: false
     default: "false"
+  sbom:
+    description: Generate a CycloneDX SBOM with Trivy for every referenced image.
+    required: false
+    default: "false"
+  cosign:
+    description: Attest each generated image SBOM using keyless Cosign signing.
+    required: false
+    default: "false"
   debug:
     description: Enable debug logging and pass --debug through to bom generate.
     required: false
@@ -61,6 +69,14 @@ runs:
   steps:
     - uses: azure/setup-helm@v5
 
+    - name: Set up Trivy
+      if: ${{ inputs.sbom == 'true' }}
+      uses: aquasecurity/setup-trivy@v0.2.6
+
+    - name: Set up Cosign
+      if: ${{ inputs.cosign == 'true' }}
+      uses: sigstore/cosign-installer@v4.1.2
+
     - id: resolve-binary
       name: Resolve bom action binary
       shell: bash
@@ -102,6 +118,8 @@ runs:
         INPUT_INCLUDE_PATHS: ${{ inputs.include-paths }}
         INPUT_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
+        INPUT_SBOM: ${{ inputs.sbom }}
+        INPUT_COSIGN: ${{ inputs.cosign }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_FORMAT: ${{ inputs.format }}
         INPUT_RELEASE_NAME: ${{ inputs.release-name }}
@@ -114,6 +132,8 @@ runs:
           --include-paths="$INPUT_INCLUDE_PATHS" \
           --exclude-paths="$INPUT_EXCLUDE_PATHS" \
           --changed-only="$INPUT_CHANGED_ONLY" \
+          --sbom="$INPUT_SBOM" \
+          --cosign="$INPUT_COSIGN" \
           --debug="$INPUT_DEBUG" \
           --format="$INPUT_FORMAT" \
           --release-name="$INPUT_RELEASE_NAME" \

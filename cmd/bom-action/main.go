@@ -51,6 +51,8 @@ func newGenerateCommand() *cobra.Command {
 	flags.StringVar(&cfg.Format, "format", cfg.Format, "Generate output format.")
 	flags.StringVar(&cfg.Namespace, "namespace", cfg.Namespace, "Helm namespace used for generation.")
 	flags.StringVar(&cfg.ReleaseName, "release-name", "", "Helm release name override.")
+	flags.BoolVar(&cfg.SBOM, "sbom", cfg.SBOM, "Generate a CycloneDX SBOM for every referenced image.")
+	flags.BoolVar(&cfg.Cosign, "cosign", cfg.Cosign, "Attest generated image SBOMs with keyless Cosign signing.")
 	flags.BoolVar(&cfg.ValidateConfiguredImageExist, "validate-configured-image-exists", false, "Fail when configured additional image selectors do not resolve.")
 	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated chart paths to exclude. Glob patterns are supported.")
 	return cmd

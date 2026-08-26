@@ -62,6 +62,8 @@ func (r generateRunner) logStartup() {
 		logging.TableRow{Label: "format", Value: strconv.Quote(r.cfg.Format)},
 		logging.TableRow{Label: "namespace", Value: strconv.Quote(r.cfg.Namespace)},
 		logging.TableRow{Label: "release name", Value: strconv.Quote(r.cfg.ReleaseName)},
+		logging.TableRow{Label: "image SBOMs", Value: strconv.FormatBool(r.cfg.SBOM)},
+		logging.TableRow{Label: "keyless Cosign attestation", Value: strconv.FormatBool(r.cfg.Cosign)},
 		logging.TableRow{Label: "fail on no matches", Value: strconv.FormatBool(r.cfg.FailOnNoMatches)},
 		logging.TableRow{Label: "include paths (raw)", Value: strconv.Quote(r.cfg.IncludePaths)},
 		logging.TableRow{Label: "include paths (parsed)", Value: logging.FormatList(r.configuredPaths)},
@@ -119,6 +121,8 @@ func (r generateRunner) runTargets(targets []string) ([]string, []string, []stri
 			Format:                       r.cfg.Format,
 			OutputPath:                   outputPath,
 			Debug:                        r.cfg.Debug,
+			SBOM:                         r.cfg.SBOM,
+			Cosign:                       r.cfg.Cosign,
 			ValidateConfiguredImageExist: r.cfg.ValidateConfiguredImageExist,
 		}
 		if err := r.deps.GenerateBOM(r.stdout, r.logger, cfg); err != nil {

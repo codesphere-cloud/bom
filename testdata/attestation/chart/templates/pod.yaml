@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attestation-smoke
+spec:
+  containers:
+    - name: smoke
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
