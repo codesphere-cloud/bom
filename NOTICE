@@ -443,21 +443,21 @@ License URL: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
  
 ----------
 Module: k8s.io/api
-Version: v0.36.3
+Version: v0.36.4
 License: Apache-2.0
-License URL: https://github.com/kubernetes/api/blob/v0.36.3/LICENSE
+License URL: https://github.com/kubernetes/api/blob/v0.36.4/LICENSE
  
 ----------
 Module: k8s.io/apimachinery/pkg
-Version: v0.36.3
+Version: v0.36.4
 License: Apache-2.0
-License URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/LICENSE
+License URL: https://github.com/kubernetes/apimachinery/blob/v0.36.4/LICENSE
  
 ----------
 Module: k8s.io/apimachinery/third_party/forked/golang/reflect
-Version: v0.36.3
+Version: v0.36.4
 License: BSD-3-Clause
-License URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/third_party/forked/golang/LICENSE
+License URL: https://github.com/kubernetes/apimachinery/blob/v0.36.4/third_party/forked/golang/LICENSE
  
 ----------
 Module: k8s.io/klog/v2
