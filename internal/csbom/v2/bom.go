@@ -13,5 +13,17 @@ type HelmCharts struct {
 
 type ContainerImage struct {
 	Ref     string   `json:"ref"`
+	Digest  string   `json:"digest,omitempty"`
+	SBOMs   *SBOMs   `json:"sboms,omitempty"`
 	Sources []string `json:"sources,omitempty"`
+}
+
+type SBOMs struct {
+	CycloneDX *SBOM `json:"cyclonedx,omitempty"`
+	SPDXJSON  *SBOM `json:"spdxJson,omitempty"`
+}
+
+type SBOM struct {
+	Path   string `json:"path"`
+	Cosign bool   `json:"cosign"`
 }

@@ -51,7 +51,7 @@ Generate-specific inputs:
 - `include-paths`: newline-separated chart selectors to include. Selectors can be exact paths, path prefixes, or glob patterns. If omitted, the Action auto-discovers chart directories from the repository root.
 - `exclude-paths`: newline-separated chart selectors to exclude after discovery. Selectors can be exact paths, path prefixes, or glob patterns.
 - `changed-only`: only process charts whose directories contain files changed in the current push or pull request
-- `sbom`: generate a CycloneDX SBOM with Trivy for every referenced image. Files are written to the chart's `sboms/` directory. Default: `false`
+- `sbom`: generate CycloneDX and SPDX JSON SBOMs with Trivy for every referenced image. Files are written to the chart's `sboms/` directory. Default: `false`
 - `cosign`: attest each generated image SBOM with keyless Cosign signing. This requires `sbom: true`, registry write access, and `id-token: write` permission. Default: `false`
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
 - `format`: output format. Default: `csbom-v2-json`
@@ -83,7 +83,7 @@ For each selected chart, the generate Action:
 1. runs `helm template`
 2. scans the rendered manifest for supported Kubernetes workload resources
 3. extracts OCI image references from those workloads
-4. generates a CycloneDX SBOM under `sboms/` for every image when `sbom` is enabled
+4. generates CycloneDX and SPDX JSON SBOMs under `sboms/` for every image when `sbom` is enabled
 5. uploads a keyless Cosign attestation for each image when `cosign` is also enabled
 6. writes the result as `bom.json` or `bom.yaml` in the chart directory, depending on the selected format
 
@@ -182,6 +182,17 @@ Example `csbom-v2-json` output:
   "containerImages": {
     "ghcr.io/acme/api": {
       "ref": "ghcr.io/acme/api:1.2.3",
+      "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "sboms": {
+        "cyclonedx": {
+          "path": "sboms/sha256-0123456789abcdef....cdx.json",
+          "cosign": true
+        },
+        "spdxJson": {
+          "path": "sboms/sha256-0123456789abcdef....spdx.json",
+          "cosign": true
+        }
+      },
       "sources": [
         "Deployment/api spec.containers[0]"
       ]
@@ -336,7 +347,7 @@ Main generate flags:
 - `--helm-arg`: append raw extra arguments to `helm template`
 - `--namespace`: namespace passed to `helm template`
 - `--release-name`: Helm release name override
-- `--sbom`: generate a CycloneDX SBOM with Trivy for every referenced image under the chart's `sboms/` directory
+- `--sbom`: generate CycloneDX and SPDX JSON SBOMs with Trivy for every referenced image under the chart's `sboms/` directory
 - `--cosign`: attest generated image SBOMs using keyless Cosign signing; requires `--sbom`
 - `--validate-configured-image-exists`: fail when configured extra image selectors do not resolve
 - `--debug`: enable debug logging

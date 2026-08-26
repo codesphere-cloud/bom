@@ -10,9 +10,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -23,14 +23,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - uses: azure/setup-helm@v5
 
       - name: Check Required Tools
         run: make check-tools
@@ -47,11 +47,11 @@ jobs:
   action-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -97,11 +97,11 @@ jobs:
       id-token: write
       packages: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -147,10 +147,24 @@ jobs:
         shell: bash
         env:
           IMAGE_REF: ${{ steps.image.outputs.reference }}
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
         run: |
           test "$(find testdata/attestation/chart/sboms -type f -name '*.cdx.json' | wc -l)" -eq 1
+          test "$(find testdata/attestation/chart/sboms -type f -name '*.spdx.json' | wc -l)" -eq 1
+          cyclonedx="$(jq -r --arg image "$IMAGE_REF" '.containerImages[] | select(.ref == $image) | .sboms.cyclonedx.path' testdata/attestation/chart/bom.json)"
+          spdx_json="$(jq -r --arg image "$IMAGE_REF" '.containerImages[] | select(.ref == $image) | .sboms.spdxJson.path' testdata/attestation/chart/bom.json)"
+          test -f "testdata/attestation/chart/$cyclonedx"
+          test -f "testdata/attestation/chart/$spdx_json"
+          jq -e --arg image "$IMAGE_REF" '.containerImages[] | select(.ref == $image) | .sboms.cyclonedx.cosign == true and .sboms.spdxJson.cosign == true' testdata/attestation/chart/bom.json
+          digest="$(jq -r --arg image "$IMAGE_REF" '.containerImages[] | select(.ref == $image) | .digest' testdata/attestation/chart/bom.json)"
+          attestation_ref="${IMAGE_REPOSITORY}@${digest}"
           cosign verify-attestation \
             --type cyclonedx \
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            "$IMAGE_REF"
+            "$attestation_ref"
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$attestation_ref"

@@ -186,15 +186,35 @@ func parseCSBOMV2(content []byte) (Document, error) {
 		if !ok {
 			return Document{}, fmt.Errorf("invalid image reference %q in csbom v2", image.Ref)
 		}
+		digest := image.Digest
+		if digest == "" {
+			digest = ref.Digest
+		}
 
 		components = append(components, Component{
 			Type:       ComponentTypeOCIImage,
 			Repository: repository,
 			Reference:  ref.Reference,
 			Tag:        ref.Tag,
-			Digest:     ref.Digest,
+			Digest:     digest,
 			Evidence:   image.Sources,
 		})
+		if image.SBOMs != nil {
+			componentSBOMs := SBOMs{}
+			if image.SBOMs.CycloneDX != nil {
+				componentSBOMs.CycloneDX = SBOM{
+					Path:   image.SBOMs.CycloneDX.Path,
+					Cosign: image.SBOMs.CycloneDX.Cosign,
+				}
+			}
+			if image.SBOMs.SPDXJSON != nil {
+				componentSBOMs.SPDXJSON = SBOM{
+					Path:   image.SBOMs.SPDXJSON.Path,
+					Cosign: image.SBOMs.SPDXJSON.Cosign,
+				}
+			}
+			components[len(components)-1].SBOMs = componentSBOMs
+		}
 	}
 	for repository, chart := range payload.HelmCharts {
 		chartReference, isOCI := helmChartOCIReference(chart.Ref)

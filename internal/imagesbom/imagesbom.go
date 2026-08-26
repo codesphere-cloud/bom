@@ -1,59 +1,131 @@
 package imagesbom
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/codesphere-cloud/bom/internal/images"
 	"github.com/codesphere-cloud/bom/internal/logging"
+	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/name"
 )
 
 const outputDirectory = "sboms"
 
-type commandRunner func(io.Writer, string, ...string) error
-
-func Generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool) error {
-	return generate(logger, refs, chartPath, attest, runExternalCommand)
+type sbomFormat struct {
+	trivy  string
+	suffix string
+	cosign string
 }
 
-func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool, run commandRunner) error {
+var sbomFormats = []sbomFormat{
+	{trivy: "cyclonedx", suffix: "cdx.json", cosign: "cyclonedx"},
+	{trivy: "spdx-json", suffix: "spdx.json", cosign: "spdxjson"},
+}
+
+type commandRunner func(io.Writer, string, ...string) error
+type digestResolver func(string) (string, error)
+
+type Result struct {
+	Digest    string
+	CycloneDX SBOM
+	SPDXJSON  SBOM
+}
+
+type SBOM struct {
+	Path   string
+	Cosign bool
+}
+
+func Generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool) (map[string]Result, error) {
+	return generate(logger, refs, chartPath, attest, runExternalCommand, resolveImageDigest)
+}
+
+func resolveImageDigest(reference string) (string, error) {
+	return crane.Digest(reference)
+}
+
+func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool, run commandRunner, resolveDigest digestResolver) (map[string]Result, error) {
+	results := make(map[string]Result, len(refs))
 	if len(refs) == 0 {
-		return nil
+		return results, nil
 	}
 
 	outputDir := filepath.Join(chartPath, outputDirectory)
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("create image SBOM directory: %w", err)
+		return nil, fmt.Errorf("create image SBOM directory: %w", err)
 	}
 
 	for _, ref := range refs {
-		outputPath := filepath.Join(outputDir, fileName(ref.Reference))
-		logger.Infof("generating CycloneDX SBOM for image %s -> %s", ref.Reference, outputPath)
-		if err := run(logger.Writer(), "trivy", "image", "--format", "cyclonedx", "--output", outputPath, ref.Reference); err != nil {
-			_ = os.Remove(outputPath)
-			return fmt.Errorf("generate image SBOM for %s: %w", ref.Reference, err)
+		digest, err := resolveDigest(ref.Reference)
+		if err != nil {
+			return nil, fmt.Errorf("resolve image digest for %s: %w", ref.Reference, err)
 		}
 
-		if !attest {
-			continue
+		result, err := generateForImage(logger, ref.Reference, digest, outputDir, attest, run)
+		if err != nil {
+			return nil, err
 		}
+		results[ref.Reference] = result
+	}
 
-		logger.Infof("attesting CycloneDX SBOM for image %s with keyless Cosign", ref.Reference)
-		if err := run(logger.Writer(), "cosign", "attest", "--yes", "--type", "cyclonedx", "--predicate", outputPath, ref.Reference); err != nil {
-			return fmt.Errorf("attest image SBOM for %s: %w", ref.Reference, err)
+	return results, nil
+}
+
+func generateForImage(logger logging.Logger, reference string, digest string, outputDir string, attest bool, run commandRunner) (Result, error) {
+	cosignReference := ""
+	if attest {
+		var err error
+		cosignReference, err = imageDigestReference(reference, digest)
+		if err != nil {
+			return Result{}, fmt.Errorf("build digest reference for %s: %w", reference, err)
 		}
 	}
 
-	return nil
+	result := Result{Digest: digest}
+	for _, format := range sbomFormats {
+		name := fileName(digest, format.suffix)
+		localPath := filepath.ToSlash(filepath.Join(outputDirectory, name))
+		outputPath := filepath.Join(outputDir, name)
+		logger.Infof("generating %s SBOM for image %s -> %s", format.trivy, reference, outputPath)
+		if err := run(logger.Writer(), "trivy", "image", "--format", format.trivy, "--output", outputPath, reference); err != nil {
+			_ = os.Remove(outputPath)
+			return Result{}, fmt.Errorf("generate %s image SBOM for %s: %w", format.trivy, reference, err)
+		}
+
+		artifact := SBOM{Path: localPath}
+		if attest {
+			logger.Infof("attesting %s SBOM for image %s with keyless Cosign", format.trivy, cosignReference)
+			if err := run(logger.Writer(), "cosign", "attest", "--yes", "--type", format.cosign, "--predicate", outputPath, cosignReference); err != nil {
+				return Result{}, fmt.Errorf("attest %s image SBOM for %s: %w", format.trivy, reference, err)
+			}
+			artifact.Cosign = true
+		}
+
+		if format.trivy == "cyclonedx" {
+			result.CycloneDX = artifact
+		} else {
+			result.SPDXJSON = artifact
+		}
+	}
+
+	return result, nil
 }
 
-func fileName(reference string) string {
-	digest := sha256.Sum256([]byte(reference))
-	return fmt.Sprintf("sbom-%x.cdx.json", digest)
+func imageDigestReference(reference string, digest string) (string, error) {
+	parsed, err := name.ParseReference(reference)
+	if err != nil {
+		return "", err
+	}
+	return parsed.Context().Digest(digest).Name(), nil
+}
+
+func fileName(digest string, suffix string) string {
+	return fmt.Sprintf("%s.%s", strings.ReplaceAll(digest, ":", "-"), suffix)
 }
 
 func runExternalCommand(output io.Writer, name string, args ...string) error {

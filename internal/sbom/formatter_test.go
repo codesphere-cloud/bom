@@ -19,7 +19,18 @@ type v2Payload struct {
 	Version         string `json:"version"`
 	Name            string `json:"name"`
 	ContainerImages map[string]struct {
-		Ref     string   `json:"ref"`
+		Ref    string `json:"ref"`
+		Digest string `json:"digest"`
+		SBOMs  *struct {
+			CycloneDX *struct {
+				Path   string `json:"path"`
+				Cosign bool   `json:"cosign"`
+			} `json:"cyclonedx"`
+			SPDXJSON *struct {
+				Path   string `json:"path"`
+				Cosign bool   `json:"cosign"`
+			} `json:"spdxJson"`
+		} `json:"sboms"`
 		Sources []string `json:"sources"`
 	} `json:"containerImages"`
 }
@@ -50,7 +61,12 @@ var _ = Describe("Formatters", func() {
 				{
 					Repository: "ghcr.io/example/api",
 					Reference:  "ghcr.io/example/api:1.2.3",
-					Evidence:   []string{"Deployment/api spec.containers[0]"},
+					Digest:     "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					SBOMs: SBOMs{
+						CycloneDX: SBOM{Path: "sboms/api.cdx.json", Cosign: true},
+						SPDXJSON:  SBOM{Path: "sboms/api.spdx.json", Cosign: true},
+					},
+					Evidence: []string{"Deployment/api spec.containers[0]"},
 				},
 				{
 					Repository: "busybox",
@@ -104,8 +120,15 @@ var _ = Describe("Formatters", func() {
 			Expect(payload.Version).To(Equal(csbomV2Version))
 			Expect(payload.Name).To(Equal("e2e-chart"))
 			Expect(payload.ContainerImages["ghcr.io/example/api"].Ref).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Digest).To(Equal("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.CycloneDX.Path).To(Equal("sboms/api.cdx.json"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.CycloneDX.Cosign).To(BeTrue())
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.SPDXJSON.Path).To(Equal("sboms/api.spdx.json"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.SPDXJSON.Cosign).To(BeTrue())
 			Expect(payload.ContainerImages["ghcr.io/example/api"].Sources).To(Equal([]string{"Deployment/api spec.containers[0]"}))
 			Expect(payload.ContainerImages["busybox"].Ref).To(Equal("busybox:1.36.1"))
+			Expect(payload.ContainerImages["busybox"].Digest).To(BeEmpty())
+			Expect(payload.ContainerImages["busybox"].SBOMs).To(BeNil())
 		})
 	})
 
@@ -121,8 +144,15 @@ var _ = Describe("Formatters", func() {
 			Expect(payload.Version).To(Equal(csbomV2Version))
 			Expect(payload.Name).To(Equal("e2e-chart"))
 			Expect(payload.ContainerImages["ghcr.io/example/api"].Ref).To(Equal("ghcr.io/example/api:1.2.3"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].Digest).To(Equal("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.CycloneDX.Path).To(Equal("sboms/api.cdx.json"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.CycloneDX.Cosign).To(BeTrue())
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.SPDXJSON.Path).To(Equal("sboms/api.spdx.json"))
+			Expect(payload.ContainerImages["ghcr.io/example/api"].SBOMs.SPDXJSON.Cosign).To(BeTrue())
 			Expect(payload.ContainerImages["ghcr.io/example/api"].Sources).To(Equal([]string{"Deployment/api spec.containers[0]"}))
 			Expect(payload.ContainerImages["busybox"].Ref).To(Equal("busybox:1.36.1"))
+			Expect(payload.ContainerImages["busybox"].Digest).To(BeEmpty())
+			Expect(payload.ContainerImages["busybox"].SBOMs).To(BeNil())
 		})
 	})
 })

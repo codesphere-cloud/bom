@@ -44,7 +44,18 @@ type Component struct {
 	Reference  string   `json:"reference"`
 	Tag        string   `json:"tag,omitempty"`
 	Digest     string   `json:"digest,omitempty"`
+	SBOMs      SBOMs    `json:"sboms,omitempty"`
 	Evidence   []string `json:"evidence,omitempty"`
+}
+
+type SBOMs struct {
+	CycloneDX SBOM `json:"cyclonedx,omitempty"`
+	SPDXJSON  SBOM `json:"spdxJson,omitempty"`
+}
+
+type SBOM struct {
+	Path   string `json:"path"`
+	Cosign bool   `json:"cosign"`
 }
 
 func ComponentsFromImages(refs []images.ImageRef) []Component {

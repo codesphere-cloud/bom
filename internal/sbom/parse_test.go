@@ -67,6 +67,14 @@ name: chart
 containerImages:
   ghcr.io/example/api:
     ref: ghcr.io/example/api:1.2.3
+    digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    sboms:
+      cyclonedx:
+        path: sboms/api.cdx.json
+        cosign: true
+      spdxJson:
+        path: sboms/api.spdx.json
+        cosign: true
     sources:
       - Deployment/api spec.containers[0]
   quay.io/example/worker:
@@ -80,6 +88,12 @@ containerImages:
 			Expect(got[1].Reference).To(Equal("quay.io/example/worker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 
 			Expect(document.Components[0].Evidence).To(Equal([]string{"Deployment/api spec.containers[0]"}))
+			Expect(document.Components[0].Digest).To(Equal("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+			Expect(document.Components[0].SBOMs).To(Equal(SBOMs{
+				CycloneDX: SBOM{Path: "sboms/api.cdx.json", Cosign: true},
+				SPDXJSON:  SBOM{Path: "sboms/api.spdx.json", Cosign: true},
+			}))
+			Expect(document.Components[1].Digest).To(Equal("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
 		})
 
 		It("parses JSON with container images and evidence", func() {

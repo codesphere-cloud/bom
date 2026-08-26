@@ -89,11 +89,14 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 	}
 
 	mergedRefs := images.Merge(refs, configuredRefs)
+	imageSBOMs := make(map[string]imagesbom.Result, len(mergedRefs))
 	if cfg.SBOM {
-		if err := imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign); err != nil {
+		imageSBOMs, err = imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign)
+		if err != nil {
 			return err
 		}
 	}
+	components := componentsFromImages(mergedRefs, imageSBOMs)
 
 	document := sbom.Document{
 		Metadata: sbom.Metadata{
@@ -112,7 +115,7 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 				HelmArgs:    cfg.HelmArgs,
 			},
 		},
-		Components: sbom.ComponentsFromImages(mergedRefs),
+		Components: components,
 	}
 
 	formatter, err := sbom.NewFormatter(cfg.Format)
@@ -134,6 +137,28 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 	}()
 
 	return formatter.Format(file, document)
+}
+
+func componentsFromImages(refs []images.ImageRef, imageSBOMs map[string]imagesbom.Result) []sbom.Component {
+	components := sbom.ComponentsFromImages(refs)
+	for idx := range components {
+		result, ok := imageSBOMs[components[idx].Reference]
+		if !ok {
+			continue
+		}
+		components[idx].Digest = result.Digest
+		components[idx].SBOMs = sbom.SBOMs{
+			CycloneDX: sbom.SBOM{
+				Path:   result.CycloneDX.Path,
+				Cosign: result.CycloneDX.Cosign,
+			},
+			SPDXJSON: sbom.SBOM{
+				Path:   result.SPDXJSON.Path,
+				Cosign: result.SPDXJSON.Cosign,
+			},
+		}
+	}
+	return components
 }
 
 func prependBOMGenerationValuesFile(valuesFiles *[]string, bomGenerationValues map[string]any) (func(), error) {

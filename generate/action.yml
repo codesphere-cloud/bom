@@ -14,7 +14,7 @@ inputs:
     required: false
     default: "false"
   sbom:
-    description: Generate a CycloneDX SBOM with Trivy for every referenced image.
+    description: Generate CycloneDX and SPDX JSON SBOMs with Trivy for every referenced image.
     required: false
     default: "false"
   cosign:
@@ -67,7 +67,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+    - uses: azure/setup-helm@v5
 
     - name: Set up Trivy
       if: ${{ inputs.sbom == 'true' }}
@@ -75,7 +75,7 @@ runs:
 
     - name: Set up Cosign
       if: ${{ inputs.cosign == 'true' }}
-      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      uses: sigstore/cosign-installer@v4.1.2
 
     - id: resolve-binary
       name: Resolve bom action binary
