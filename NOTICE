@@ -52,6 +52,12 @@ License: Unicode-DFS-2016
 License URL: https://github.com/apparentlymart/go-textseg/blob/v15.0.0/LICENSE
  
 ----------
+Module: github.com/apparentlymart/go-textseg/v17/textseg
+Version: v17.0.1
+License: MIT
+License URL: https://github.com/apparentlymart/go-textseg/blob/v17.0.1/LICENSE
+ 
+----------
 Module: github.com/cloudflare/circl
 Version: v1.6.5
 License: BSD-3-Clause
