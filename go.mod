@@ -8,7 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-containerregistry v0.22.0
 	github.com/mikefarah/yq/v4 v4.53.6
-	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
