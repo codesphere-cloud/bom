@@ -1,6 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>codesphere-cloud/renovate-config:go-config"],
+  "ignorePaths": [
+    "testdata/charts/**",
+    "testdata/attestation/chart/**"
+  ],
   "packageRules": [
     {
       "matchManagers": ["gomod"],
