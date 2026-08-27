@@ -53,6 +53,7 @@ Generate-specific inputs:
 - `changed-only`: only process charts whose directories contain files changed in the current push or pull request
 - `sbom`: generate CycloneDX and SPDX JSON SBOMs with Trivy for every referenced image. Files are written to the chart's `sboms/` directory. Default: `false`
 - `cosign`: attest each generated image SBOM with keyless Cosign signing. This requires `sbom: true`, registry write access, and `id-token: write` permission. Default: `false`
+- `force`: regenerate digest-named image SBOMs and upload attestations even when they already exist. Requires `sbom: true`. Default: `false`
 - `debug`: enable extra action logs and pass `--debug` through to the CLI
 - `format`: output format. Default: `csbom-v2-json`
 - `release-name`: optional Helm release name override
@@ -83,8 +84,8 @@ For each selected chart, the generate Action:
 1. runs `helm template`
 2. scans the rendered manifest for supported Kubernetes workload resources
 3. extracts OCI image references from those workloads
-4. generates CycloneDX and SPDX JSON SBOMs under `sboms/` for every image when `sbom` is enabled
-5. uploads a keyless Cosign attestation for each image when `cosign` is also enabled
+4. generates CycloneDX and SPDX JSON SBOMs under `sboms/` for every image when `sbom` is enabled, reusing files already present for the resolved image digest unless `force` is enabled
+5. uploads a keyless Cosign attestation for each image when `cosign` is also enabled, skipping predicate types already present for the image digest unless `force` is enabled
 6. writes the result as `bom.json` or `bom.yaml` in the chart directory, depending on the selected format
 
 Supported Kubernetes workload primitives:
@@ -349,6 +350,7 @@ Main generate flags:
 - `--release-name`: Helm release name override
 - `--sbom`: generate CycloneDX and SPDX JSON SBOMs with Trivy for every referenced image under the chart's `sboms/` directory
 - `--cosign`: attest generated image SBOMs using keyless Cosign signing; requires `--sbom`
+- `--force`: regenerate image SBOMs and upload attestations even when they already exist; requires `--sbom`
 - `--validate-configured-image-exists`: fail when configured extra image selectors do not resolve
 - `--debug`: enable debug logging
 

@@ -46,7 +46,7 @@ var _ = Describe("Generate", func() {
 			return digests[reference], nil
 		}
 
-		results, err := generate(newTestLogger(), refs, chartPath, false, run, resolveDigest)
+		results, err := generate(newTestLogger(), refs, chartPath, false, false, run, resolveDigest)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(invocations).To(HaveLen(4))
 		for idx, ref := range refs {
@@ -82,17 +82,24 @@ var _ = Describe("Generate", func() {
 			if name == "trivy" {
 				return os.WriteFile(args[4], []byte("{}\n"), 0o600)
 			}
+			if len(args) > 0 && args[0] == "download" {
+				return fmt.Errorf("no matching attestations")
+			}
 			return nil
 		}
 		resolveDigest := func(string) (string, error) { return digest, nil }
 
-		results, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, true, run, resolveDigest)
+		results, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, true, false, run, resolveDigest)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(invocations).To(HaveLen(4))
+		Expect(invocations).To(HaveLen(6))
 		Expect(invocations).To(Equal([]commandInvocation{
 			{
 				name: "trivy",
 				args: []string{"image", "--format", "cyclonedx", "--output", cycloneDXPath, ref.Reference},
+			},
+			{
+				name: "cosign",
+				args: []string{"download", "attestation", "--predicate-type", "https://cyclonedx.org/bom", digestRef},
 			},
 			{
 				name: "cosign",
@@ -101,6 +108,10 @@ var _ = Describe("Generate", func() {
 			{
 				name: "trivy",
 				args: []string{"image", "--format", "spdx-json", "--output", spdxJSONPath, ref.Reference},
+			},
+			{
+				name: "cosign",
+				args: []string{"download", "attestation", "--predicate-type", "https://spdx.dev/Document", digestRef},
 			},
 			{
 				name: "cosign",
@@ -120,6 +131,88 @@ var _ = Describe("Generate", func() {
 		}))
 	})
 
+	It("reuses digest-named SBOMs from the local filesystem", func() {
+		chartPath := GinkgoT().TempDir()
+		ref := images.ImageRef{Reference: "ghcr.io/example/api:1.0.0"}
+		digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		outputDir := filepath.Join(chartPath, outputDirectory)
+		Expect(os.MkdirAll(outputDir, 0o755)).To(Succeed())
+		for _, format := range sbomFormats {
+			Expect(os.WriteFile(filepath.Join(outputDir, fileName(digest, format.suffix)), []byte("cached\n"), 0o600)).To(Succeed())
+		}
+
+		run := func(io.Writer, string, ...string) error {
+			Fail("external commands must not run when both SBOM files are cached")
+			return nil
+		}
+
+		results, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, false, false, run, func(string) (string, error) {
+			return digest, nil
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results[ref.Reference].Digest).To(Equal(digest))
+		Expect(results[ref.Reference].CycloneDX.Path).To(Equal(filepath.ToSlash(filepath.Join(outputDirectory, fileName(digest, "cdx.json")))))
+		Expect(results[ref.Reference].SPDXJSON.Path).To(Equal(filepath.ToSlash(filepath.Join(outputDirectory, fileName(digest, "spdx.json")))))
+	})
+
+	It("does not upload SBOM attestations already present for the image digest", func() {
+		chartPath := GinkgoT().TempDir()
+		ref := images.ImageRef{Reference: "ghcr.io/example/api:1.0.0"}
+		digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		digestRef := "ghcr.io/example/api@" + digest
+		outputDir := filepath.Join(chartPath, outputDirectory)
+		Expect(os.MkdirAll(outputDir, 0o755)).To(Succeed())
+		for _, format := range sbomFormats {
+			Expect(os.WriteFile(filepath.Join(outputDir, fileName(digest, format.suffix)), []byte("cached\n"), 0o600)).To(Succeed())
+		}
+
+		var invocations []commandInvocation
+		run := func(_ io.Writer, name string, args ...string) error {
+			invocations = append(invocations, commandInvocation{name: name, args: append([]string(nil), args...)})
+			return nil
+		}
+
+		results, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, true, false, run, func(string) (string, error) {
+			return digest, nil
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(invocations).To(Equal([]commandInvocation{
+			{name: "cosign", args: []string{"download", "attestation", "--predicate-type", "https://cyclonedx.org/bom", digestRef}},
+			{name: "cosign", args: []string{"download", "attestation", "--predicate-type", "https://spdx.dev/Document", digestRef}},
+		}))
+		Expect(results[ref.Reference].CycloneDX.Cosign).To(BeTrue())
+		Expect(results[ref.Reference].SPDXJSON.Cosign).To(BeTrue())
+	})
+
+	It("regenerates and reattests SBOMs when force is enabled", func() {
+		chartPath := GinkgoT().TempDir()
+		ref := images.ImageRef{Reference: "ghcr.io/example/api:1.0.0"}
+		digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		outputDir := filepath.Join(chartPath, outputDirectory)
+		Expect(os.MkdirAll(outputDir, 0o755)).To(Succeed())
+		for _, format := range sbomFormats {
+			Expect(os.WriteFile(filepath.Join(outputDir, fileName(digest, format.suffix)), []byte("cached\n"), 0o600)).To(Succeed())
+		}
+
+		var invocations []commandInvocation
+		run := func(_ io.Writer, name string, args ...string) error {
+			invocations = append(invocations, commandInvocation{name: name, args: append([]string(nil), args...)})
+			if name == "trivy" {
+				return os.WriteFile(args[4], []byte("fresh\n"), 0o600)
+			}
+			return nil
+		}
+
+		_, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, true, true, run, func(string) (string, error) {
+			return digest, nil
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(invocations).To(HaveLen(4))
+		for _, invocation := range invocations {
+			Expect(invocation.args[0]).NotTo(Equal("download"))
+		}
+	})
+
 	It("uses the resolved digest when the input is already digest-qualified", func() {
 		oldDigest := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		newDigest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -127,6 +220,33 @@ var _ = Describe("Generate", func() {
 		result, err := imageDigestReference("ghcr.io/example/api@"+oldDigest, newDigest)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal("ghcr.io/example/api@" + newDigest))
+	})
+
+	It("does not resolve a digest-qualified image through the registry again", func() {
+		chartPath := GinkgoT().TempDir()
+		digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		ref := images.ImageRef{
+			Reference: "ghcr.io/example/api@" + digest,
+			Digest:    digest,
+		}
+		outputDir := filepath.Join(chartPath, outputDirectory)
+		Expect(os.MkdirAll(outputDir, 0o755)).To(Succeed())
+		for _, format := range sbomFormats {
+			Expect(os.WriteFile(filepath.Join(outputDir, fileName(digest, format.suffix)), []byte("cached\n"), 0o600)).To(Succeed())
+		}
+
+		resolveDigest := func(string) (string, error) {
+			Fail("digest-qualified references must not be resolved through the registry")
+			return "", nil
+		}
+		run := func(io.Writer, string, ...string) error {
+			Fail("external commands must not run when both SBOM files are cached")
+			return nil
+		}
+
+		results, err := generate(newTestLogger(), []images.ImageRef{ref}, chartPath, false, false, run, resolveDigest)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results[ref.Reference].Digest).To(Equal(digest))
 	})
 
 	It("stops before generating SBOMs when resolving the digest fails", func() {
@@ -138,7 +258,7 @@ var _ = Describe("Generate", func() {
 		}
 		resolveDigest := func(string) (string, error) { return "", resolveErr }
 
-		_, err := generate(newTestLogger(), []images.ImageRef{ref}, GinkgoT().TempDir(), false, run, resolveDigest)
+		_, err := generate(newTestLogger(), []images.ImageRef{ref}, GinkgoT().TempDir(), false, false, run, resolveDigest)
 		Expect(err).To(MatchError(ContainSubstring("resolve image digest for " + ref.Reference)))
 		Expect(err).To(MatchError(ContainSubstring(resolveErr.Error())))
 	})

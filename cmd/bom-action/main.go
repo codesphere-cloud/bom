@@ -53,6 +53,7 @@ func newGenerateCommand() *cobra.Command {
 	flags.StringVar(&cfg.ReleaseName, "release-name", "", "Helm release name override.")
 	flags.BoolVar(&cfg.SBOM, "sbom", cfg.SBOM, "Generate CycloneDX and SPDX JSON SBOMs for every referenced image.")
 	flags.BoolVar(&cfg.Cosign, "cosign", cfg.Cosign, "Attest generated image SBOMs with keyless Cosign signing.")
+	flags.BoolVar(&cfg.Force, "force", cfg.Force, "Regenerate image SBOMs and upload attestations even when they already exist.")
 	flags.BoolVar(&cfg.ValidateConfiguredImageExist, "validate-configured-image-exists", false, "Fail when configured additional image selectors do not resolve.")
 	flags.StringVar(&cfg.ExcludePaths, "exclude-paths", "", "Newline- or comma-separated chart paths to exclude. Glob patterns are supported.")
 	return cmd

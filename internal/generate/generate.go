@@ -29,6 +29,7 @@ type Config struct {
 	Debug                        bool
 	SBOM                         bool
 	Cosign                       bool
+	Force                        bool
 	ValidateConfiguredImageExist bool
 	ToolVersion                  string
 }
@@ -91,7 +92,7 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 	mergedRefs := images.Merge(refs, configuredRefs)
 	imageSBOMs := make(map[string]imagesbom.Result, len(mergedRefs))
 	if cfg.SBOM {
-		imageSBOMs, err = imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign)
+		imageSBOMs, err = imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign, cfg.Force)
 		if err != nil {
 			return err
 		}

@@ -21,6 +21,10 @@ inputs:
     description: Attest each generated image SBOM using keyless Cosign signing.
     required: false
     default: "false"
+  force:
+    description: Regenerate image SBOMs and upload attestations even when they already exist.
+    required: false
+    default: "false"
   debug:
     description: Enable debug logging and pass --debug through to bom generate.
     required: false
@@ -120,6 +124,7 @@ runs:
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_SBOM: ${{ inputs.sbom }}
         INPUT_COSIGN: ${{ inputs.cosign }}
+        INPUT_FORCE: ${{ inputs.force }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_FORMAT: ${{ inputs.format }}
         INPUT_RELEASE_NAME: ${{ inputs.release-name }}
@@ -134,6 +139,7 @@ runs:
           --changed-only="$INPUT_CHANGED_ONLY" \
           --sbom="$INPUT_SBOM" \
           --cosign="$INPUT_COSIGN" \
+          --force="$INPUT_FORCE" \
           --debug="$INPUT_DEBUG" \
           --format="$INPUT_FORMAT" \
           --release-name="$INPUT_RELEASE_NAME" \

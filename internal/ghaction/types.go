@@ -28,6 +28,7 @@ type GenerateConfig struct {
 	ReleaseName                  string
 	SBOM                         bool
 	Cosign                       bool
+	Force                        bool
 	ValidateConfiguredImageExist bool
 	ExcludePaths                 string
 }

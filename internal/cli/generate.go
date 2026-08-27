@@ -34,6 +34,7 @@ func addGenerateFlags(cmd *cobra.Command, cfg *generate.Config) {
 	flags.BoolVar(&cfg.Debug, "debug", false, "Enable debug logging.")
 	flags.BoolVar(&cfg.SBOM, "sbom", false, "Generate CycloneDX and SPDX JSON SBOMs for every referenced image.")
 	flags.BoolVar(&cfg.Cosign, "cosign", false, "Attest generated image SBOMs with keyless Cosign signing. Requires --sbom.")
+	flags.BoolVar(&cfg.Force, "force", false, "Regenerate image SBOMs and upload attestations even when they already exist. Requires --sbom.")
 	flags.StringVar(&cfg.ReleaseName, "release-name", "", "Helm release name. Defaults to the chart name from Chart.yaml.")
 	flags.StringVar(&cfg.Namespace, "namespace", cfg.Namespace, "Namespace passed to helm template.")
 	flags.StringVar(&cfg.Format, "format", cfg.Format, "Output format: spdx-json, spdx, csbom-json, csbom-yaml, csbom, csbom-v2-json, csbom-v2-yaml, or csbom-v2.")

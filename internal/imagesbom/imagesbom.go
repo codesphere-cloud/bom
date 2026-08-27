@@ -17,14 +17,15 @@ import (
 const outputDirectory = "sboms"
 
 type sbomFormat struct {
-	trivy  string
-	suffix string
-	cosign string
+	trivy            string
+	suffix           string
+	cosign           string
+	predicateTypeURI string
 }
 
 var sbomFormats = []sbomFormat{
-	{trivy: "cyclonedx", suffix: "cdx.json", cosign: "cyclonedx"},
-	{trivy: "spdx-json", suffix: "spdx.json", cosign: "spdxjson"},
+	{trivy: "cyclonedx", suffix: "cdx.json", cosign: "cyclonedx", predicateTypeURI: "https://cyclonedx.org/bom"},
+	{trivy: "spdx-json", suffix: "spdx.json", cosign: "spdxjson", predicateTypeURI: "https://spdx.dev/Document"},
 }
 
 type commandRunner func(io.Writer, string, ...string) error
@@ -41,15 +42,15 @@ type SBOM struct {
 	Cosign bool
 }
 
-func Generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool) (map[string]Result, error) {
-	return generate(logger, refs, chartPath, attest, runExternalCommand, resolveImageDigest)
+func Generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool, force bool) (map[string]Result, error) {
+	return generate(logger, refs, chartPath, attest, force, runExternalCommand, resolveImageDigest)
 }
 
 func resolveImageDigest(reference string) (string, error) {
 	return crane.Digest(reference)
 }
 
-func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool, run commandRunner, resolveDigest digestResolver) (map[string]Result, error) {
+func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, attest bool, force bool, run commandRunner, resolveDigest digestResolver) (map[string]Result, error) {
 	results := make(map[string]Result, len(refs))
 	if len(refs) == 0 {
 		return results, nil
@@ -61,12 +62,16 @@ func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, a
 	}
 
 	for _, ref := range refs {
-		digest, err := resolveDigest(ref.Reference)
-		if err != nil {
-			return nil, fmt.Errorf("resolve image digest for %s: %w", ref.Reference, err)
+		digest := ref.Digest
+		if digest == "" {
+			var err error
+			digest, err = resolveDigest(ref.Reference)
+			if err != nil {
+				return nil, fmt.Errorf("resolve image digest for %s: %w", ref.Reference, err)
+			}
 		}
 
-		result, err := generateForImage(logger, ref.Reference, digest, outputDir, attest, run)
+		result, err := generateForImage(logger, ref.Reference, digest, outputDir, attest, force, run)
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +81,7 @@ func generate(logger logging.Logger, refs []images.ImageRef, chartPath string, a
 	return results, nil
 }
 
-func generateForImage(logger logging.Logger, reference string, digest string, outputDir string, attest bool, run commandRunner) (Result, error) {
+func generateForImage(logger logging.Logger, reference string, digest string, outputDir string, attest bool, force bool, run commandRunner) (Result, error) {
 	cosignReference := ""
 	if attest {
 		var err error
@@ -91,17 +96,26 @@ func generateForImage(logger logging.Logger, reference string, digest string, ou
 		name := fileName(digest, format.suffix)
 		localPath := filepath.ToSlash(filepath.Join(outputDirectory, name))
 		outputPath := filepath.Join(outputDir, name)
-		logger.Infof("generating %s SBOM for image %s -> %s", format.trivy, reference, outputPath)
-		if err := run(logger.Writer(), "trivy", "image", "--format", format.trivy, "--output", outputPath, reference); err != nil {
-			_ = os.Remove(outputPath)
-			return Result{}, fmt.Errorf("generate %s image SBOM for %s: %w", format.trivy, reference, err)
+		if !force && fileExists(outputPath) {
+			logger.Infof("reusing existing %s SBOM for image digest %s -> %s", format.trivy, digest, outputPath)
+		} else {
+			logger.Infof("generating %s SBOM for image %s -> %s", format.trivy, reference, outputPath)
+			if err := run(logger.Writer(), "trivy", "image", "--format", format.trivy, "--output", outputPath, reference); err != nil {
+				_ = os.Remove(outputPath)
+				return Result{}, fmt.Errorf("generate %s image SBOM for %s: %w", format.trivy, reference, err)
+			}
 		}
 
 		artifact := SBOM{Path: localPath}
 		if attest {
-			logger.Infof("attesting %s SBOM for image %s with keyless Cosign", format.trivy, cosignReference)
-			if err := run(logger.Writer(), "cosign", "attest", "--yes", "--type", format.cosign, "--predicate", outputPath, cosignReference); err != nil {
-				return Result{}, fmt.Errorf("attest %s image SBOM for %s: %w", format.trivy, reference, err)
+			attestationExists := !force && remoteAttestationExists(run, format.predicateTypeURI, cosignReference)
+			if attestationExists {
+				logger.Infof("reusing existing %s SBOM attestation for image %s", format.trivy, cosignReference)
+			} else {
+				logger.Infof("attesting %s SBOM for image %s with keyless Cosign", format.trivy, cosignReference)
+				if err := run(logger.Writer(), "cosign", "attest", "--yes", "--type", format.cosign, "--predicate", outputPath, cosignReference); err != nil {
+					return Result{}, fmt.Errorf("attest %s image SBOM for %s: %w", format.trivy, reference, err)
+				}
 			}
 			artifact.Cosign = true
 		}
@@ -114,6 +128,15 @@ func generateForImage(logger logging.Logger, reference string, digest string, ou
 	}
 
 	return result, nil
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func remoteAttestationExists(run commandRunner, predicateType string, reference string) bool {
+	return run(io.Discard, "cosign", "download", "attestation", "--predicate-type", predicateType, reference) == nil
 }
 
 func imageDigestReference(reference string, digest string) (string, error) {
