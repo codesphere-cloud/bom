@@ -89,9 +89,9 @@ License URL: https://github.com/distribution/reference/blob/v0.6.0/LICENSE
  
 ----------
 Module: github.com/docker/cli/cli/config
-Version: v29.7.2
+Version: v29.8.1
 License: Apache-2.0
-License URL: https://github.com/docker/cli/blob/v29.7.2/LICENSE
+License URL: https://github.com/docker/cli/blob/v29.8.1/LICENSE
  
 ----------
 Module: github.com/docker/docker-credential-helpers
