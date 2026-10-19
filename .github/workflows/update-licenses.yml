@@ -6,9 +6,12 @@ name: 'Auto-Update Docs & Licenses'
 permissions:
   contents: write
 
+# temporarily disabled: only runs when triggered manually
+# to re-enable, restore the following trigger:
+#   pull_request:
+#     types: [opened, synchronize]
 on:
-  pull_request:
-    types: [opened, synchronize]
+  workflow_dispatch:
 
 jobs:
   update-files:
