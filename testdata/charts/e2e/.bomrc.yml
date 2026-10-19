@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 additionalImages:
   - image: ghcr.io/example/external:2.0.0
   - resource:

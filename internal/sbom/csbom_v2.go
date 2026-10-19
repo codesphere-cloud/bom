@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package sbom
 
 import intcsbomv2 "github.com/codesphere-cloud/bom/internal/csbom/v2"

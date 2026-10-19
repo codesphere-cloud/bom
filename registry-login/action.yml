@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 name: bom registry login
 description: Authenticate bom registry checks with an OCI registry inside GitHub Actions.
 inputs:

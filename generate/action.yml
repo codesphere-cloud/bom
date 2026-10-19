@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 name: bom generate
 description: Generate Helm chart BOMs inside GitHub Actions.
 inputs:

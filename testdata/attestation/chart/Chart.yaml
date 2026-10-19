@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 apiVersion: v2
 name: attestation-smoke
 description: Chart fixture for image SBOM attestation smoke tests

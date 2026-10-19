@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 FROM golang:1.26.5-alpine AS builder
 
 WORKDIR /src

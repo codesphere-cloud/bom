@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package images
 
 func MapRepositories(refs []ImageRef, mappings map[string]string) []ImageRef {

@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 name: bom check
 description: Validate generated BOM files against upstream registries inside GitHub Actions.
 inputs:

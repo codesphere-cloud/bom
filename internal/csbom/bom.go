@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package csbom
 
 // Config represents the Bill of Materials configuration.
