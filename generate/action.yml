@@ -75,7 +75,10 @@ runs:
 
     - name: Set up Trivy
       if: ${{ inputs.sbom == 'true' }}
-      uses: aquasecurity/setup-trivy@v0.2.6
+      uses: aquasecurity/setup-trivy@v0.3.1
+      with:
+        # renovate: datasource=github-releases depName=aquasecurity/trivy
+        version: v0.76.0
 
     - name: Set up Cosign
       if: ${{ inputs.cosign == 'true' }}
