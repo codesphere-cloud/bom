@@ -125,15 +125,15 @@ License URL: https://github.com/go-git/gcfg/blob/3a3c6141e376/LICENSE
  
 ----------
 Module: github.com/go-git/go-billy/v5
-Version: v5.9.1
+Version: v5.9.2
 License: Apache-2.0
-License URL: https://github.com/go-git/go-billy/blob/v5.9.1/LICENSE
+License URL: https://github.com/go-git/go-billy/blob/v5.9.2/LICENSE
  
 ----------
 Module: github.com/go-git/go-git/v5
-Version: v5.19.2
+Version: v5.19.3
 License: Apache-2.0
-License URL: https://github.com/go-git/go-git/blob/v5.19.2/LICENSE
+License URL: https://github.com/go-git/go-git/blob/v5.19.3/LICENSE
  
 ----------
 Module: github.com/go-ini/ini
@@ -238,12 +238,6 @@ License: MIT
 License URL: https://github.com/klauspost/compress/blob/v1.19.2/zstd/internal/xxhash/LICENSE.txt
  
 ----------
-Module: github.com/klauspost/cpuid/v2
-Version: v2.4.0
-License: MIT
-License URL: https://github.com/klauspost/cpuid/blob/v2.4.0/LICENSE
- 
-----------
 Module: github.com/magiconair/properties
 Version: v1.18.12
 License: BSD-2-Clause
@@ -305,9 +299,9 @@ License URL: https://github.com/pelletier/go-toml/blob/v2.4.3/LICENSE
  
 ----------
 Module: github.com/pjbgf/sha1cd
-Version: v0.6.0
+Version: v0.7.0
 License: Apache-2.0
-License URL: https://github.com/pjbgf/sha1cd/blob/v0.6.0/LICENSE
+License URL: https://github.com/pjbgf/sha1cd/blob/v0.7.0/LICENSE
  
 ----------
 Module: github.com/sergi/go-diff/diffmatchpatch
