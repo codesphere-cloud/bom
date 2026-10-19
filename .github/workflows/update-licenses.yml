@@ -29,6 +29,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Set up copywrite
+        uses: hashicorp/setup-copywrite@v1.1.3
+
       - name: Update docs & licenses
         run: |
           make generate-license
