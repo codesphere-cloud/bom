@@ -75,10 +75,40 @@ runs:
 
     - name: Set up Trivy
       if: ${{ inputs.sbom == 'true' }}
-      uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-      with:
+      shell: bash
+      env:
         # renovate: datasource=github-releases depName=aquasecurity/trivy
-        version: v0.76.0
+        TRIVY_VERSION: v0.76.0
+      run: |
+        # The upstream installer uses get.trivy.dev, which can fail DNS lookup.
+        # Download the same release directly and retain checksum verification.
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          Linux/X64) arch=64bit ;;
+          Linux/ARM64) arch=ARM64 ;;
+          *) echo "unsupported Trivy runner: $RUNNER_OS/$RUNNER_ARCH" >&2; exit 1 ;;
+        esac
+        version="${TRIVY_VERSION#v}"
+        archive="trivy_${version}_Linux-${arch}.tar.gz"
+        checksums="trivy_${version}_checksums.txt"
+        base="https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}"
+        tmp_dir=$(mktemp -d)
+        trap 'rm -rf "$tmp_dir"' EXIT
+        for file in "$archive" "$checksums"; do
+          curl --fail --show-error --location --retry 3 --retry-all-errors \
+            "$base/$file" --output "$tmp_dir/$file"
+        done
+        (
+          cd "$tmp_dir"
+          awk -v archive="$archive" '$2 == archive {print}' "$checksums" > selected-checksum.txt
+          test -s selected-checksum.txt
+          sha256sum --check selected-checksum.txt
+          tar --no-same-owner -xzf "$archive" trivy
+        )
+        binary_dir="$RUNNER_TEMP/bom-trivy"
+        mkdir -p "$binary_dir"
+        install -m 0755 "$tmp_dir/trivy" "$binary_dir/trivy"
+        echo "$binary_dir" >> "$GITHUB_PATH"
+        "$binary_dir/trivy" --version
 
     - name: Set up Cosign
       if: ${{ inputs.cosign == 'true' }}
