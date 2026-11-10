@@ -151,7 +151,9 @@ runs:
         export DOCKER_CONFIG
         echo '{}' > "$DOCKER_CONFIG/config.json"
 
-        identity="${IDENTITY_REGEXP:-^https://github.com/${GITHUB_REPOSITORY}/}"
+        # A repository name may contain '.', which must match only itself.
+        repository_pattern="${GITHUB_REPOSITORY//./\\.}"
+        identity="${IDENTITY_REGEXP:-^https://github\\.com/${repository_pattern}/}"
 
         cosign attest --yes --k8s-keychain --type cyclonedx \
           --predicate "$PREDICATE" "$CHART_REF"
