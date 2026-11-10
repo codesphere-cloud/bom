@@ -304,7 +304,7 @@ All selected BOMs are checked even when some fail. The Action exits unsuccessful
 
 ### Attest Chart SBOMs In CI
 
-`generate` with `sbom: true` writes one SBOM per image. `attest-chart` runs after the chart is pushed: it merges the chart's `sboms/sha256-*.cdx.json` hierarchically into one CycloneDX document whose subject is the chart, then attests it on the chart's digest with keyless Cosign and reads the attestation back.
+`generate` with `sbom: true` writes one SBOM per image. `attest-chart` runs after the chart is pushed: it merges the chart's `sboms/sha256-*.cdx.json` hierarchically into one CycloneDX document whose subject is the chart, then attests it on the chart's GHCR digest with keyless Cosign and reads the attestation back.
 
 ```yaml
 jobs:
@@ -340,13 +340,13 @@ Attest-chart inputs:
 
 - `chart-path`, `chart-name`, `chart-version`: the chart whose `sboms/` dir is merged, and the subject the merged SBOM describes. Required unless `sbom-path` is set
 - `chart-group`: group of the subject. Default: `codesphere`
-- `chart-ref`: the pushed chart as `<registry>/<repository>@sha256:<digest>`. Required when `attest` is `true`
+- `chart-ref`: the pushed chart as `ghcr.io/<repository>@sha256:<digest>`. Required when `attest` is `true`. Only GHCR is supported: Cosign gets the registry credentials through its GitHub keychain
 - `sbom-path`: attest an already merged SBOM instead of merging, for jobs that merge and attest separately
 - `output-dir`: where the merged SBOM is written, as `<chart-name>-<chart-version>.cdx.json`. Default: `sbom-out`
 - `spec-version`: CycloneDX version of the merged SBOM, as `cyclonedx-cli --output-version` takes it. Default: `v1_7`
 - `attest`: attest and verify. Requires `id-token: write` and registry write access. Default: `true`
 - `certificate-identity-regexp`: identity the attestation is verified against. Default: any workflow of the calling repository
-- `registry-token`: token Cosign uses for the registry. Default: `github.token`
+- `registry-token`: GHCR token Cosign uses for the registry. Default: `github.token`
 
 A chart without image SBOMs gets no chart SBOM: the `sbom-path` output is empty and nothing is attested.
 
