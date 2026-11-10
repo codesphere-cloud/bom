@@ -112,6 +112,8 @@ jobs:
       - name: Verify Merged Chart SBOM
         env:
           SBOM_PATH: ${{ steps.attest_chart.outputs.sbom-path }}
+        # sboms/ also holds a busybox-c SBOM that bom.json does not reference,
+        # so the nested names prove a stale SBOM is left out.
         run: |
           test "$SBOM_PATH" = sbom-out/smoke-1.2.3.cdx.json
           cyclonedx validate --input-file "$SBOM_PATH" --input-version v1_7 --fail-on-errors

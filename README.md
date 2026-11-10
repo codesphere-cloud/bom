@@ -304,7 +304,7 @@ All selected BOMs are checked even when some fail. The Action exits unsuccessful
 
 ### Attest Chart SBOMs In CI
 
-`generate` with `sbom: true` writes one SBOM per image. `attest-chart` runs after the chart is pushed: it merges the chart's `sboms/sha256-*.cdx.json` hierarchically into one CycloneDX document whose subject is the chart, then attests it on the chart's GHCR digest with keyless Cosign and reads the attestation back.
+`generate` with `sbom: true` writes one SBOM per image. `attest-chart` runs after the chart is pushed: it merges the CycloneDX SBOMs the chart's `bom.json` references hierarchically into one CycloneDX document whose subject is the chart, then attests it on the chart's GHCR digest with keyless Cosign and reads the attestation back. SBOMs left in `sboms/` for digests the chart no longer uses are not merged.
 
 ```yaml
 jobs:
@@ -338,7 +338,7 @@ jobs:
 
 Attest-chart inputs:
 
-- `chart-path`, `chart-name`, `chart-version`: the chart whose `sboms/` dir is merged, and the subject the merged SBOM describes. Required unless `sbom-path` is set
+- `chart-path`, `chart-name`, `chart-version`: the chart whose `bom.json` SBOMs are merged, and the subject the merged SBOM describes. Required unless `sbom-path` is set
 - `chart-group`: group of the subject. Default: `codesphere`
 - `chart-ref`: the pushed chart as `ghcr.io/<repository>@sha256:<digest>`. Required when `attest` is `true`. Only GHCR is supported: Cosign gets the registry credentials through its GitHub keychain
 - `sbom-path`: attest an already merged SBOM instead of merging, for jobs that merge and attest separately
