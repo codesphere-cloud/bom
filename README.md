@@ -345,7 +345,7 @@ Attest-chart inputs:
 - `output-dir`: where the merged SBOM is written, as `<chart-name>-<chart-version>.cdx.json`. Default: `sbom-out`
 - `spec-version`: CycloneDX version of the merged SBOM, as `cyclonedx-cli --output-version` takes it. Default: `v1_7`
 - `attest`: attest and verify. Requires `id-token: write` and registry write access. Default: `true`
-- `certificate-identity-regexp`: identity the attestation is verified against. Default: any workflow of the calling repository
+- `certificate-identity-regexp`: identity the attestation is verified against. Default: any workflow of the calling repository, matched literally
 - `registry-token`: GHCR token Cosign uses for the registry. Default: `github.token`
 
 A chart without image SBOMs gets no chart SBOM: the `sbom-path` output is empty and nothing is attested.
