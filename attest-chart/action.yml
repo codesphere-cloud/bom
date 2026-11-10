@@ -1,0 +1,161 @@
+name: bom attest chart
+description: >
+  Merge a chart's per-image CycloneDX SBOMs, written by generate with sbom: true, into one
+  chart-level SBOM and attest it on the pushed chart's OCI digest with keyless Cosign.
+inputs:
+  chart-path:
+    description: Chart directory whose sboms/ holds the per-image SBOMs. Not used when sbom-path is set.
+    required: false
+    default: ""
+  chart-name:
+    description: Name of the software the merged SBOM describes, usually the chart name.
+    required: false
+    default: ""
+  chart-version:
+    description: Version of the software the merged SBOM describes, usually the chart version.
+    required: false
+    default: ""
+  chart-group:
+    description: Group of the software the merged SBOM describes.
+    required: false
+    default: codesphere
+  chart-ref:
+    description: Pushed chart to attest, as <registry>/<repository>@sha256:<digest>. Required when attest is true.
+    required: false
+    default: ""
+  sbom-path:
+    description: An already merged chart SBOM to attest. Skips the merge.
+    required: false
+    default: ""
+  output-dir:
+    description: Directory the merged SBOM is written to, as <chart-name>-<chart-version>.cdx.json.
+    required: false
+    default: sbom-out
+  spec-version:
+    description: CycloneDX specification version of the merged SBOM, as cyclonedx-cli's --output-version takes it.
+    required: false
+    default: v1_7
+  attest:
+    description: Attest the SBOM on chart-ref and verify the attestation. Requires id-token write permission.
+    required: false
+    default: "true"
+  certificate-identity-regexp:
+    description: Signing identity the attestation is verified against. Defaults to any workflow of the calling repository.
+    required: false
+    default: ""
+  registry-token:
+    description: Token cosign uses for the chart registry; the default needs the workflow permission packages write.
+    required: false
+    default: ${{ github.token }}
+outputs:
+  sbom-path:
+    description: The merged or given chart SBOM. Empty when the chart has no image SBOMs.
+    value: ${{ steps.merge.outputs.sbom-path }}
+runs:
+  using: composite
+  steps:
+    # GitHub only warns on a missing required input of a composite action, so
+    # these checks are the real enforcement, and they run before anything is
+    # downloaded or signed.
+    - name: Validate inputs
+      shell: bash
+      env:
+        CHART_PATH: ${{ inputs.chart-path }}
+        CHART_NAME: ${{ inputs.chart-name }}
+        CHART_VERSION: ${{ inputs.chart-version }}
+        CHART_REF: ${{ inputs.chart-ref }}
+        SBOM_PATH: ${{ inputs.sbom-path }}
+        SPEC_VERSION: ${{ inputs.spec-version }}
+        ATTEST: ${{ inputs.attest }}
+      run: |
+        if [ -n "$SBOM_PATH" ]; then
+          if [ ! -f "$SBOM_PATH" ]; then
+            echo "::error title=No SBOM::sbom-path '$SBOM_PATH' does not exist"
+            exit 1
+          fi
+        elif [ -z "$CHART_PATH" ] || [ -z "$CHART_NAME" ] || [ -z "$CHART_VERSION" ]; then
+          echo "::error title=Missing inputs::chart-path, chart-name and chart-version are required unless sbom-path is set"
+          exit 1
+        fi
+        if ! [[ "$SPEC_VERSION" =~ ^v1_[0-9]+$ ]]; then
+          echo "::error title=Invalid spec-version::expected v1_<minor>, got '$SPEC_VERSION'"
+          exit 1
+        fi
+        if [ "$ATTEST" = "true" ] && ! [[ "$CHART_REF" =~ ^[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error title=Invalid chart-ref::attesting needs <registry>/<repository>@sha256:<digest>, got '$CHART_REF'"
+          exit 1
+        fi
+
+    - id: merge
+      name: Merge image SBOMs into the chart SBOM
+      shell: bash
+      env:
+        CHART_PATH: ${{ inputs.chart-path }}
+        CHART_NAME: ${{ inputs.chart-name }}
+        CHART_VERSION: ${{ inputs.chart-version }}
+        CHART_GROUP: ${{ inputs.chart-group }}
+        SBOM_PATH: ${{ inputs.sbom-path }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        SPEC_VERSION: ${{ inputs.spec-version }}
+        INSTALL_DIR: ${{ runner.temp }}/cyclonedx-cli
+      run: |
+        if [ -n "$SBOM_PATH" ]; then
+          echo "sbom-path=$SBOM_PATH" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        shopt -s nullglob
+        image_sboms=("$CHART_PATH"/sboms/sha256-*.cdx.json)
+        if [ "${#image_sboms[@]}" -eq 0 ]; then
+          echo "::notice::$CHART_PATH has no image SBOMs, so it gets no chart SBOM."
+          echo "sbom-path=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        cyclonedx="$("${{ github.action_path }}/../setup-cyclonedx/install.sh" "$INSTALL_DIR")"
+        out="$OUTPUT_DIR/${CHART_NAME}-${CHART_VERSION}.cdx.json"
+        mkdir -p "$OUTPUT_DIR"
+        "$cyclonedx" merge --hierarchical --output-version "$SPEC_VERSION" \
+          --group "$CHART_GROUP" --name "$CHART_NAME" --version "$CHART_VERSION" \
+          --input-files "${image_sboms[@]}" \
+          --output-file "$out"
+        echo "sbom-path=$out" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Cosign
+      if: ${{ inputs.attest == 'true' && steps.merge.outputs.sbom-path != '' }}
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        # The default is a shared path under $HOME, which concurrent jobs on a
+        # persistent runner would download the same binary into at once.
+        install-dir: ${{ runner.temp }}/cosign
+
+    - name: Attest and verify the chart SBOM
+      if: ${{ inputs.attest == 'true' && steps.merge.outputs.sbom-path != '' }}
+      shell: bash
+      env:
+        CHART_REF: ${{ inputs.chart-ref }}
+        PREDICATE: ${{ steps.merge.outputs.sbom-path }}
+        IDENTITY_REGEXP: ${{ inputs.certificate-identity-regexp }}
+        # cosign has no env var for registry credentials. --k8s-keychain adds
+        # go-containerregistry's GitHub keychain, which reads GITHUB_TOKEN (and
+        # GITHUB_ACTOR) for ghcr.io, so the token is in neither argv nor a file.
+        GITHUB_TOKEN: ${{ inputs.registry-token }}
+      run: |
+        # An empty docker config of this step's own, so cosign cannot pick up
+        # a credential another step or job left in $HOME. Without any
+        # config.json, cosign's keychain falls back to $REGISTRY_AUTH_FILE and
+        # $XDG_RUNTIME_DIR/containers/auth.json, which may be shared.
+        DOCKER_CONFIG="$(mktemp -d "$RUNNER_TEMP/attest-chart-auth.XXXXXX")"
+        export DOCKER_CONFIG
+        echo '{}' > "$DOCKER_CONFIG/config.json"
+
+        identity="${IDENTITY_REGEXP:-^https://github.com/${GITHUB_REPOSITORY}/}"
+
+        cosign attest --yes --k8s-keychain --type cyclonedx \
+          --predicate "$PREDICATE" "$CHART_REF"
+        # Read it back, so an attestation that never landed fails the run
+        # instead of shipping a chart we only believe is attested.
+        cosign verify-attestation --k8s-keychain --type cyclonedx \
+          --certificate-identity-regexp "$identity" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          "$CHART_REF" > /dev/null

@@ -1,0 +1,35 @@
+name: bom setup cyclonedx
+description: Install the pinned cyclonedx-cli and export the CycloneDX spec version chart SBOMs are written in.
+inputs:
+  spec-version:
+    description: CycloneDX specification version merged SBOMs are written in, as cyclonedx-cli's --output-version takes it.
+    required: false
+    default: v1_7
+outputs:
+  path:
+    description: Absolute path of the installed cyclonedx binary.
+    value: ${{ steps.install.outputs.path }}
+  spec-version:
+    description: The validated spec version, also exported as CYCLONEDX_SPEC_VERSION.
+    value: ${{ steps.install.outputs.spec-version }}
+runs:
+  using: composite
+  steps:
+    - id: install
+      name: Install cyclonedx-cli
+      shell: bash
+      env:
+        INPUT_SPEC_VERSION: ${{ inputs.spec-version }}
+        # Under the job's temp dir rather than /usr/local/bin: no sudo, and
+        # nothing left behind on a persistent self-hosted runner.
+        INSTALL_DIR: ${{ runner.temp }}/cyclonedx-cli
+      run: |
+        if ! [[ "$INPUT_SPEC_VERSION" =~ ^v1_[0-9]+$ ]]; then
+          echo "::error title=Invalid spec-version::expected v1_<minor>, got '$INPUT_SPEC_VERSION'"
+          exit 1
+        fi
+        binary="$("${{ github.action_path }}/install.sh" "$INSTALL_DIR")"
+        dirname "$binary" >> "$GITHUB_PATH"
+        echo "CYCLONEDX_SPEC_VERSION=$INPUT_SPEC_VERSION" >> "$GITHUB_ENV"
+        echo "path=$binary" >> "$GITHUB_OUTPUT"
+        echo "spec-version=$INPUT_SPEC_VERSION" >> "$GITHUB_OUTPUT"
