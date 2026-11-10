@@ -1,7 +1,7 @@
 name: bom attest chart
 description: >
   Merge a chart's per-image CycloneDX SBOMs, written by generate with sbom: true, into one
-  chart-level SBOM and attest it on the pushed chart's OCI digest with keyless Cosign.
+  chart-level SBOM and attest it on the pushed chart's GHCR digest with keyless Cosign.
 inputs:
   chart-path:
     description: Chart directory whose sboms/ holds the per-image SBOMs. Not used when sbom-path is set.
@@ -20,7 +20,7 @@ inputs:
     required: false
     default: codesphere
   chart-ref:
-    description: Pushed chart to attest, as <registry>/<repository>@sha256:<digest>. Required when attest is true.
+    description: Pushed chart to attest, as ghcr.io/<repository>@sha256:<digest>. Required when attest is true.
     required: false
     default: ""
   sbom-path:
@@ -44,7 +44,7 @@ inputs:
     required: false
     default: ""
   registry-token:
-    description: Token cosign uses for the chart registry; the default needs the workflow permission packages write.
+    description: GHCR token cosign uses for the chart registry; the default needs the workflow permission packages write.
     required: false
     default: ${{ github.token }}
 outputs:
@@ -81,8 +81,10 @@ runs:
           echo "::error title=Invalid spec-version::expected v1_<minor>, got '$SPEC_VERSION'"
           exit 1
         fi
-        if [ "$ATTEST" = "true" ] && ! [[ "$CHART_REF" =~ ^[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
-          echo "::error title=Invalid chart-ref::attesting needs <registry>/<repository>@sha256:<digest>, got '$CHART_REF'"
+        # Registry credentials reach cosign only through the GHCR keychain (see
+        # the attest step), so another registry would fail to authorize.
+        if [ "$ATTEST" = "true" ] && ! [[ "$CHART_REF" =~ ^ghcr\.io/[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error title=Invalid chart-ref::attesting needs ghcr.io/<repository>@sha256:<digest>, got '$CHART_REF'"
           exit 1
         fi
 
