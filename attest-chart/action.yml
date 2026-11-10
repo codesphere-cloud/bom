@@ -1,10 +1,11 @@
 name: bom attest chart
 description: >
-  Merge a chart's per-image CycloneDX SBOMs, written by generate with sbom: true, into one
-  chart-level SBOM and attest it on the pushed chart's GHCR digest with keyless Cosign.
+  Merge the per-image CycloneDX SBOMs that a chart's bom.json references, written by generate
+  with sbom: true, into one chart-level SBOM and attest it on the pushed chart's GHCR digest
+  with keyless Cosign.
 inputs:
   chart-path:
-    description: Chart directory whose sboms/ holds the per-image SBOMs. Not used when sbom-path is set.
+    description: Chart directory whose bom.json lists the per-image SBOMs to merge. Not used when sbom-path is set.
     required: false
     default: ""
   chart-name:
@@ -106,10 +107,28 @@ runs:
           exit 0
         fi
 
-        shopt -s nullglob
-        image_sboms=("$CHART_PATH"/sboms/sha256-*.cdx.json)
+        # generate keeps SBOMs of digests the chart no longer uses, so only
+        # the ones the current bom.json references describe the chart.
+        bom_json="$CHART_PATH/bom.json"
+        image_sboms=()
+        if [ -f "$bom_json" ]; then
+          # Outside the loop, so a bom.json jq cannot read fails the step.
+          sbom_paths="$(jq -r '[.containerImages // {} | .[] | .sboms.cyclonedx.path // empty] | unique | .[]' "$bom_json")"
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if ! [[ "$path" =~ ^sboms/sha256-[0-9a-f]{64}\.cdx\.json$ ]]; then
+              echo "::error title=Invalid SBOM path::$bom_json references '$path', expected sboms/sha256-<digest>.cdx.json"
+              exit 1
+            fi
+            if [ ! -f "$CHART_PATH/$path" ]; then
+              echo "::error title=Missing SBOM::$bom_json references $path, which does not exist"
+              exit 1
+            fi
+            image_sboms+=("$CHART_PATH/$path")
+          done <<< "$sbom_paths"
+        fi
         if [ "${#image_sboms[@]}" -eq 0 ]; then
-          echo "::notice::$CHART_PATH has no image SBOMs, so it gets no chart SBOM."
+          echo "::notice::$CHART_PATH has no image SBOMs in bom.json, so it gets no chart SBOM."
           echo "sbom-path=" >> "$GITHUB_OUTPUT"
           exit 0
         fi

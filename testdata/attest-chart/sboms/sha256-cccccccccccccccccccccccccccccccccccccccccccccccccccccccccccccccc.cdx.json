@@ -1,0 +1,21 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:oci/image-c@sha256%3Acccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "type": "container",
+      "name": "ghcr.io/codesphere-cloud/image-c",
+      "version": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:apk/alpine/busybox-c@1.37.0",
+      "type": "library",
+      "name": "busybox-c",
+      "version": "1.37.0"
+    }
+  ]
+}

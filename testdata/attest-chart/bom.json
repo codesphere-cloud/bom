@@ -1,0 +1,26 @@
+{
+  "version": "2",
+  "name": "attest-chart",
+  "containerImages": {
+    "ghcr.io/codesphere-cloud/image-a": {
+      "ref": "ghcr.io/codesphere-cloud/image-a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sboms": {
+        "cyclonedx": {
+          "path": "sboms/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.cdx.json",
+          "cosign": false
+        }
+      }
+    },
+    "ghcr.io/codesphere-cloud/image-b": {
+      "ref": "ghcr.io/codesphere-cloud/image-b@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sboms": {
+        "cyclonedx": {
+          "path": "sboms/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.cdx.json",
+          "cosign": false
+        }
+      }
+    }
+  }
+}
