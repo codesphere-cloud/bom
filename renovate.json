@@ -8,6 +8,13 @@
 			"postUpgradeTasks": {
 				"commands": ["go mod tidy", "make generate-notice"]
 			}
+		},
+		{
+			"matchDepNames": ["CycloneDX/cyclonedx-cli"],
+			"postUpgradeTasks": {
+				"commands": ["scripts/pin-cyclonedx.sh"],
+				"fileFilters": ["setup-cyclonedx/install.sh"]
+			}
 		}
 	],
 	"customManagers": [
@@ -17,6 +24,14 @@
 			"matchStrings": [
 				"# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s+version: (?<currentValue>\\S+)"
 			]
+		},
+		{
+			"customType": "regex",
+			"managerFilePatterns": ["/(^|/)setup-cyclonedx/install\\.sh$/"],
+			"matchStrings": [
+				"# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
+			],
+			"extractVersionTemplate": "^v(?<version>.+)$"
 		}
 	]
 }
