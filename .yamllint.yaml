@@ -1,0 +1,13 @@
+# Permissive on layout, strict on syntax: GitHub workflow and action files
+# use long run: lines, `on:` keys and SHA-pin comments the defaults reject.
+extends: default
+
+rules:
+  document-start: disable
+  truthy:
+    check-keys: false
+  line-length:
+    max: 200
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable

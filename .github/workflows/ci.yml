@@ -89,6 +89,54 @@ jobs:
           echo "Test failed: Command succeeded when it should have failed."
           exit 1
 
+      - name: Run Setup Cyclonedx Via Local Setup Cyclonedx Action
+        id: setup_cyclonedx
+        uses: ./setup-cyclonedx
+
+      - name: Verify Cyclonedx Is On PATH With The Default Spec Version
+        env:
+          CYCLONEDX_PATH: ${{ steps.setup_cyclonedx.outputs.path }}
+        run: |
+          test "$(command -v cyclonedx)" = "$CYCLONEDX_PATH"
+          test "$CYCLONEDX_SPEC_VERSION" = v1_7
+
+      - name: Merge Image SBOMs Via Local Attest Chart Action
+        id: attest_chart
+        uses: ./attest-chart
+        with:
+          chart-path: testdata/attest-chart
+          chart-name: smoke
+          chart-version: 1.2.3
+          attest: "false"
+
+      - name: Verify Merged Chart SBOM
+        env:
+          SBOM_PATH: ${{ steps.attest_chart.outputs.sbom-path }}
+        # sboms/ also holds a busybox-c SBOM that bom.json does not reference,
+        # so the nested names prove a stale SBOM is left out.
+        run: |
+          test "$SBOM_PATH" = sbom-out/smoke-1.2.3.cdx.json
+          cyclonedx validate --input-file "$SBOM_PATH" --input-version v1_7 --fail-on-errors
+          jq -e '.specVersion == "1.7"
+            and .metadata.component.group == "codesphere"
+            and .metadata.component.name == "smoke"
+            and .metadata.component.version == "1.2.3"
+            and ([.components[].components[].name] | sort) == ["busybox-a", "busybox-b"]' "$SBOM_PATH"
+
+      - name: Run Attest Chart On A Chart Without Image SBOMs
+        id: attest_chart_empty
+        uses: ./attest-chart
+        with:
+          chart-path: testdata/charts/e2e
+          chart-name: e2e
+          chart-version: 0.0.0
+          attest: "false"
+
+      - name: Verify No Chart SBOM Was Written
+        env:
+          SBOM_PATH: ${{ steps.attest_chart_empty.outputs.sbom-path }}
+        run: test -z "$SBOM_PATH"
+
   attestation-smoke:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -168,3 +216,47 @@ jobs:
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "$attestation_ref"
+
+      - id: chart
+        name: Package and push smoke chart
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          repository="$(echo "oci://ghcr.io/${GITHUB_REPOSITORY}/attestation-smoke-charts" | tr '[:upper:]' '[:lower:]')"
+          version="0.0.0-${GITHUB_SHA::12}"
+          helm package testdata/attestation/chart --version "$version" -d "$RUNNER_TEMP/chart"
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          push_log="$(helm push "$RUNNER_TEMP"/chart/*.tgz "$repository" 2>&1 | tee /dev/stderr)"
+          digest="$(printf '%s\n' "$push_log" | awk '/^Digest: /{print $2}' | head -n1)"
+          name="$(yq '.name' testdata/attestation/chart/Chart.yaml)"
+          test -n "$digest"
+          {
+            echo "name=$name"
+            echo "version=$version"
+            echo "ref=${repository#oci://}/${name}@${digest}"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: chart_sbom
+        name: Merge and attest chart SBOM
+        uses: ./attest-chart
+        with:
+          chart-path: testdata/attestation/chart
+          chart-name: ${{ steps.chart.outputs.name }}
+          chart-version: ${{ steps.chart.outputs.version }}
+          chart-ref: ${{ steps.chart.outputs.ref }}
+
+      - name: Verify chart SBOM attestation
+        shell: bash
+        env:
+          CHART_REF: ${{ steps.chart.outputs.ref }}
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign verify-attestation --k8s-keychain \
+            --type cyclonedx \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$CHART_REF" |
+            jq -se --arg name "$CHART_NAME" \
+              '.[0].payload | @base64d | fromjson | .predicate.specVersion == "1.7" and .predicate.metadata.component.name == $name'
