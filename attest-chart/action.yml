@@ -133,7 +133,8 @@ runs:
           exit 0
         fi
 
-        cyclonedx="$("${{ github.action_path }}/../setup-cyclonedx/install.sh" "$INSTALL_DIR")"
+        "${{ github.action_path }}/../setup-cyclonedx/install.sh" "$INSTALL_DIR"
+        cyclonedx="$INSTALL_DIR/cyclonedx"
         out="$OUTPUT_DIR/${CHART_NAME}-${CHART_VERSION}.cdx.json"
         mkdir -p "$OUTPUT_DIR"
         "$cyclonedx" merge --hierarchical --output-version "$SPEC_VERSION" \

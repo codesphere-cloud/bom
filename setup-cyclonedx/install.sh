@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Installs the pinned cyclonedx-cli into the directory given as $1 and prints
-# the binary's path. This file is the only place the version and checksums are
-# defined: setup-cyclonedx and attest-chart both call it, and Renovate updates
-# the version here (scripts/pin-cyclonedx.sh rewrites the checksums).
+# Installs the pinned cyclonedx-cli as $1/cyclonedx. Its output is log only:
+# callers build the binary's path themselves. This file is the only place the
+# version and checksums are defined: setup-cyclonedx and attest-chart both call
+# it, and Renovate updates the version here (scripts/pin-cyclonedx.sh rewrites
+# the checksums).
 #
 # A GitHub release asset is mutable, so the content is pinned and not just the
 # version.
@@ -35,8 +36,9 @@ binary="$install_dir/cyclonedx"
 mkdir -p "$install_dir"
 
 # Several steps of one job may call this; a binary that already passes the
-# checksum is reused instead of downloaded again.
-if ! echo "$sha256  $binary" | sha256sum --check --strict --status 2>/dev/null; then
+# checksum is reused instead of downloaded again. The uutils sha256sum of
+# Ubuntu 26.04 prints a missing file to stdout even with --status.
+if ! echo "$sha256  $binary" | sha256sum --check --strict --status >/dev/null 2>&1; then
   curl -fsSL --retry 3 \
     "https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CYCLONEDX_VERSION}/${asset}" \
     -o "$binary.download"
@@ -46,4 +48,3 @@ if ! echo "$sha256  $binary" | sha256sum --check --strict --status 2>/dev/null; 
 fi
 
 "$binary" --version >&2
-echo "$binary"

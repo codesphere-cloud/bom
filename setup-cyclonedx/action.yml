@@ -28,7 +28,8 @@ runs:
           echo "::error title=Invalid spec-version::expected v1_<minor>, got '$INPUT_SPEC_VERSION'"
           exit 1
         fi
-        binary="$("${{ github.action_path }}/install.sh" "$INSTALL_DIR")"
+        "${{ github.action_path }}/install.sh" "$INSTALL_DIR"
+        binary="$INSTALL_DIR/cyclonedx"
         dirname "$binary" >> "$GITHUB_PATH"
         echo "CYCLONEDX_SPEC_VERSION=$INPUT_SPEC_VERSION" >> "$GITHUB_ENV"
         echo "path=$binary" >> "$GITHUB_OUTPUT"
