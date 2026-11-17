@@ -14,15 +14,17 @@ Choose the section that matches how you use this repository:
 
 ## Users Of The GitHub Action
 
-This repository ships three composite Actions:
+This repository ships five composite Actions:
 
 - [generate/action.yml](/Users/schrodit/dev/cs/bom/generate/action.yml) generates BOM files for Helm charts
 - [registry-login/action.yml](/Users/schrodit/dev/cs/bom/registry-login/action.yml) authenticates registry access for subsequent checks
 - [check/action.yml](/Users/schrodit/dev/cs/bom/check/action.yml) validates BOM files against upstream registries
+- [attest-chart/action.yml](attest-chart/action.yml) merges a chart's image SBOMs into one chart SBOM and attests it on the pushed chart
+- [setup-cyclonedx/action.yml](setup-cyclonedx/action.yml) installs the pinned `cyclonedx-cli` for callers that merge SBOMs themselves
 
 All Actions:
 
-- run a prebuilt binary from `dist/linux-*` directly on the runner
+- run a prebuilt binary from `dist/linux-*`, or a pinned release binary, directly on the runner
 - support Linux runners only
 
 ### Generate BOMs In CI
@@ -300,6 +302,58 @@ Check outputs:
 
 All selected BOMs are checked even when some fail. The Action exits unsuccessfully after processing every BOM and writes a step-summary table containing each BOM and its validation status or error. Its metrics include the total number of image references outside the allowed registries and the total number that could not be found upstream.
 
+### Attest Chart SBOMs In CI
+
+`generate` with `sbom: true` writes one SBOM per image. `attest-chart` runs after the chart is pushed: it merges the CycloneDX SBOMs the chart's `bom.json` references hierarchically into one CycloneDX document whose subject is the chart, then attests it on the chart's GHCR digest with keyless Cosign and reads the attestation back. SBOMs left in `sboms/` for digests the chart no longer uses are not merged.
+
+```yaml
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: codesphere-cloud/bom/generate@main
+        with:
+          include-paths: chart
+          sbom: true
+
+      - id: push
+        uses: codesphere-cloud/helm-action/push@main
+        with:
+          chart: chart
+          repository: oci://ghcr.io/codesphere-cloud/charts
+
+      - uses: codesphere-cloud/bom/attest-chart@main
+        with:
+          chart-path: chart
+          chart-name: my-chart
+          chart-version: 1.2.3
+          chart-ref: ghcr.io/codesphere-cloud/charts/my-chart@${{ steps.push.outputs.digest }}
+```
+
+Attest-chart inputs:
+
+- `chart-path`, `chart-name`, `chart-version`: the chart whose `bom.json` SBOMs are merged, and the subject the merged SBOM describes. Required unless `sbom-path` is set
+- `chart-group`: group of the subject. Default: `codesphere`
+- `chart-ref`: the pushed chart as `ghcr.io/<repository>@sha256:<digest>`. Required when `attest` is `true`. Only GHCR is supported: Cosign gets the registry credentials through its GitHub keychain
+- `sbom-path`: attest an already merged SBOM instead of merging, for jobs that merge and attest separately
+- `output-dir`: where the merged SBOM is written, as `<chart-name>-<chart-version>.cdx.json`. Default: `sbom-out`
+- `spec-version`: CycloneDX version of the merged SBOM, as `cyclonedx-cli --output-version` takes it. Default: `v1_7`
+- `attest`: attest and verify. Requires `id-token: write` and registry write access. Default: `true`
+- `certificate-identity-regexp`: identity the attestation is verified against. Default: any workflow of the calling repository, matched literally
+- `registry-token`: GHCR token Cosign uses for the registry. Default: `github.token`
+
+A chart without image SBOMs gets no chart SBOM: the `sbom-path` output is empty and nothing is attested.
+
+Callers that merge SBOMs in their own scripts use `setup-cyclonedx` instead. It puts `cyclonedx` on `PATH` and exports `CYCLONEDX_SPEC_VERSION` (input `spec-version`, default `v1_7`), so the version and the spec default stay defined in this repository.
+
+[setup-cyclonedx/install.sh](setup-cyclonedx/install.sh) is the only place the `cyclonedx-cli` version and checksums are pinned. Renovate bumps the version, and [scripts/pin-cyclonedx.sh](scripts/pin-cyclonedx.sh) rewrites the checksums in the same commit.
+
 ## Users Of The CLI
 
 Use the CLI for local debugging, reproducing GitHub Action behavior, or developing chart/BOM logic outside CI.
@@ -435,6 +489,7 @@ make dist
 - [internal/sbom](/Users/schrodit/dev/cs/bom/internal/sbom): SPDX and `csbom` / `csbom-v2` formatting and parsing
 - [internal/ghaction](/Users/schrodit/dev/cs/bom/internal/ghaction): shared action filtering, path resolution, and output handling
 - [generate/action.yml](/Users/schrodit/dev/cs/bom/generate/action.yml) and [check/action.yml](/Users/schrodit/dev/cs/bom/check/action.yml): composite Action entrypoints
+- [attest-chart/action.yml](attest-chart/action.yml) and [setup-cyclonedx/action.yml](setup-cyclonedx/action.yml): composite Actions around the pinned `cyclonedx-cli`, which [setup-cyclonedx/install.sh](setup-cyclonedx/install.sh) installs
 - [scripts/build-dist.sh](/Users/schrodit/dev/cs/bom/scripts/build-dist.sh): dist artifact builder
 
 ### Action Development
