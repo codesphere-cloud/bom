@@ -16,6 +16,8 @@ import (
 
 const defaultToolVersion = "dev"
 
+const noImagesFix = "if the chart has none, set expectNoImages: true in the chart's .bomrc.yml, otherwise expose them with bomGenerationValues or additionalImages"
+
 type Config struct {
 	ChartPath                    string
 	ReleaseName                  string
@@ -90,6 +92,9 @@ func Run(stdout io.Writer, logger logging.Logger, cfg Config) error {
 	}
 
 	mergedRefs := images.Merge(refs, configuredRefs)
+	if err := bomConfig.CheckImageCount(len(mergedRefs), noImagesFix); err != nil {
+		return err
+	}
 	imageSBOMs := make(map[string]imagesbom.Result, len(mergedRefs))
 	if cfg.SBOM {
 		imageSBOMs, err = imagesbom.Generate(logger, mergedRefs, cfg.ChartPath, cfg.Cosign, cfg.Force)

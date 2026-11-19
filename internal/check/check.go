@@ -3,12 +3,16 @@ package check
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/codesphere-cloud/bom/internal/bomlint"
+	"github.com/codesphere-cloud/bom/internal/bomrc"
 	"github.com/codesphere-cloud/bom/internal/images"
 	"github.com/codesphere-cloud/bom/internal/logging"
 	"github.com/codesphere-cloud/bom/internal/sbom"
 )
+
+const noImagesFix = "if the chart has none, set expectNoImages: true in a .bomrc.yml in the same directory as the BOM, otherwise regenerate the BOM with the images exposed"
 
 type Config struct {
 	BOMPath   string
@@ -51,14 +55,6 @@ func RunWithValidator(logger logging.Logger, cfg Config, validator Validator) er
 		return err
 	}
 
-	refs := sbom.OCIRefs(document)
-	if err := images.ValidateAllowedRegistries(refs, lintConfig.AllowedRegistries); err != nil {
-		return err
-	}
-	if err := validator(refs); err != nil {
-		return err
-	}
-
 	imageCount := 0
 	chartCount := 0
 	for _, component := range document.Components {
@@ -68,6 +64,21 @@ func RunWithValidator(logger logging.Logger, cfg Config, validator Validator) er
 			imageCount++
 		}
 	}
+	bomConfig, err := bomrc.Load(filepath.Dir(cfg.BOMPath))
+	if err != nil {
+		return err
+	}
+	if err := bomConfig.CheckImageCount(imageCount, noImagesFix); err != nil {
+		return err
+	}
+	refs := sbom.OCIRefs(document)
+	if err := images.ValidateAllowedRegistries(refs, lintConfig.AllowedRegistries); err != nil {
+		return err
+	}
+	if err := validator(refs); err != nil {
+		return err
+	}
+
 	logger.Debugf("validated %d image reference(s) and %d Helm chart reference(s) in %s", imageCount, chartCount, cfg.BOMPath)
 	return nil
 }

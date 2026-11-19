@@ -131,3 +131,82 @@ var _ = Describe("BOM exclusions", func() {
 		Entry("by normalized relative prefix", "./boms/legacy/"),
 	)
 })
+
+var _ = Describe("expectNoImages", func() {
+	const withImage = `
+version: "2"
+name: chart
+containerImages:
+  api:
+    ref: ghcr.io/example/api:1.2.3
+`
+	const chartsOnly = `
+version: "2"
+name: chart
+helmCharts:
+  dependency:
+    ref: oci://ghcr.io/example/charts/dependency:2.0.0
+`
+
+	run := func(bom string, bomrc string) (error, bool) {
+		directory := GinkgoT().TempDir()
+		path := filepath.Join(directory, "bom.json")
+		Expect(os.WriteFile(path, []byte(bom), 0o600)).To(Succeed())
+		if bomrc != "" {
+			Expect(os.WriteFile(filepath.Join(directory, ".bomrc.yml"), []byte(bomrc), 0o600)).To(Succeed())
+		}
+
+		validatorCalled := false
+		err := RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path}, func(_ []images.ImageRef) error {
+			validatorCalled = true
+			return nil
+		})
+		return err, validatorCalled
+	}
+
+	It("fails without calling the registry when a BOM has no images and does not declare it", func() {
+		err, validatorCalled := run(chartsOnly, "")
+		Expect(err).To(MatchError(ContainSubstring("no container images found")))
+		Expect(err).To(MatchError(ContainSubstring("same directory as the BOM")))
+		Expect(validatorCalled).To(BeFalse())
+	})
+
+	It("accepts a BOM without images when .bomrc.yml next to it declares expectNoImages", func() {
+		err, _ := run(chartsOnly, "expectNoImages: true\n")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("reads the .bomrc.yaml file name next to the BOM", func() {
+		directory := GinkgoT().TempDir()
+		path := filepath.Join(directory, "bom.json")
+		Expect(os.WriteFile(path, []byte(chartsOnly), 0o600)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(directory, ".bomrc.yaml"), []byte("expectNoImages: true\n"), 0o600)).To(Succeed())
+
+		Expect(RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path}, func(_ []images.ImageRef) error { return nil })).To(Succeed())
+	})
+
+	It("accepts a BOM with images when none are declared", func() {
+		err, validatorCalled := run(withImage, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(validatorCalled).To(BeTrue())
+	})
+
+	It("fails when a BOM with images sits next to a .bomrc.yml declaring expectNoImages", func() {
+		err, _ := run(withImage, "expectNoImages: true\n")
+		Expect(err).To(MatchError(ContainSubstring("expectNoImages is set")))
+	})
+
+	It("fails when the .bomrc.yml next to the BOM is malformed", func() {
+		err, _ := run(withImage, "expectNoImages: [\n")
+		Expect(err).To(MatchError(ContainSubstring("parse")))
+	})
+
+	It("does not require the declaration for BOMs excluded by .bomlint.yml", func() {
+		directory := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(directory, ".bomlint.yml"), []byte("excludePaths:\n  - bom.json\n"), 0o600)).To(Succeed())
+		path := filepath.Join(directory, "bom.json")
+		Expect(os.WriteFile(path, []byte(chartsOnly), 0o600)).To(Succeed())
+
+		Expect(RunWithValidator(logging.NewWriterLogger(io.Discard, false), Config{BOMPath: path}, func(_ []images.ImageRef) error { return nil })).To(Succeed())
+	})
+})
