@@ -149,6 +149,9 @@ additionalImages:
 imageKeyMappings:
   ghcr.io/acme/api: api
   docker.io/library/busybox: busybox
+
+# Declare that the chart intentionally has no container images.
+# expectNoImages: true
 ```
 
 `.bomrc.yml` behavior:
@@ -162,6 +165,8 @@ imageKeyMappings:
 - expressions are evaluated by [yq](https://github.com/mikefarah/yq) itself, so the full yq expression language is available (paths, `select`, string operators, arithmetic, pipes, ...)
 - `key` optionally overrides the BOM key for that configured image
 - `imageKeyMappings` remaps auto-discovered repository keys in `csbom-json` and `csbom-yaml`
+- `expectNoImages: true` declares that the chart has no container images. Without it, `generate` fails when no image is found, so a chart that hides its images behind required values is noticed; use `bomGenerationValues` or `additionalImages` to expose them instead. With it, `generate` fails when an image is found, so the declaration cannot go stale
+- `bom check` applies the same rule to the BOM file it validates, before any registry call. It reads `.bomrc.yml` or `.bomrc.yaml` from the directory that contains the BOM (for example `charts/api/bom.json` next to `charts/api/.bomrc.yml`), so a BOM written elsewhere cannot see the declaration. Helm chart references do not count as images. A malformed `.bomrc.yml` fails `check`, and BOMs excluded by `.bomlint.yml` skip the rule. `check` rejects BOMs without any component in the `spdx-json` and `csbom` formats before this rule runs, so use `csbom-v2` for charts without images
 
 ### Output Formats
 

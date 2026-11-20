@@ -16,6 +16,21 @@ type Config struct {
 	AdditionalImages    []AdditionalImage `json:"additionalImages"`
 	ImageKeyMappings    map[string]string `json:"imageKeyMappings,omitempty"`
 	BOMGenerationValues map[string]any    `json:"bomGenerationValues,omitempty"`
+	ExpectNoImages      bool              `json:"expectNoImages,omitempty"`
+}
+
+// CheckImageCount fails when the number of container images found for a chart
+// contradicts ExpectNoImages: none found without the declaration, or some
+// found with it. Helm chart references are not images and must not be counted.
+// fix tells the caller's user how to resolve the no-images case.
+func (c Config) CheckImageCount(count int, fix string) error {
+	switch {
+	case count == 0 && !c.ExpectNoImages:
+		return fmt.Errorf("no container images found; %s", fix)
+	case count > 0 && c.ExpectNoImages:
+		return fmt.Errorf("expectNoImages is set in .bomrc.yml but %d container image(s) were found; remove expectNoImages", count)
+	}
+	return nil
 }
 
 type AdditionalImage struct {

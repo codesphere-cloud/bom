@@ -144,3 +144,41 @@ var _ = Describe("ImageValue", func() {
 		Expect(err).To(HaveOccurred())
 	})
 })
+
+var _ = Describe("CheckImageCount", func() {
+	It("fails when no images are found and none are expected", func() {
+		err := Config{}.CheckImageCount(0, "do the fix")
+		Expect(err).To(MatchError(ContainSubstring("no container images found")))
+		Expect(err).To(MatchError(ContainSubstring("; do the fix")))
+	})
+
+	It("accepts no images when they are expected", func() {
+		Expect(Config{ExpectNoImages: true}.CheckImageCount(0, "do the fix")).To(Succeed())
+	})
+
+	It("accepts images when none are declared", func() {
+		Expect(Config{}.CheckImageCount(2, "do the fix")).To(Succeed())
+	})
+
+	It("fails when images are found although none are expected", func() {
+		err := Config{ExpectNoImages: true}.CheckImageCount(2, "do the fix")
+		Expect(err).To(MatchError(ContainSubstring("2 container image(s) were found")))
+	})
+})
+
+var _ = Describe("Load expectNoImages", func() {
+	It("parses expectNoImages from the config file", func() {
+		chartPath := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(chartPath, fileNames[0]), []byte("expectNoImages: true\n"), 0o644)).To(Succeed())
+
+		cfg, err := Load(chartPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.ExpectNoImages).To(BeTrue())
+	})
+
+	It("defaults expectNoImages to false", func() {
+		cfg, err := Load(GinkgoT().TempDir())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.ExpectNoImages).To(BeFalse())
+	})
+})
